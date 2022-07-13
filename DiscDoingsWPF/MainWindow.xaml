@@ -1,0 +1,55 @@
+﻿<Window x:Class="DiscDoingsWPF.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:DiscDoingsWPF"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="550" Width="800"
+        x:Name="TheMainWindow">
+    <Grid>
+        <TabControl>
+            <TabItem Header="All Files">
+                <StackPanel>
+            <Label Content="All files"
+                   Margin ="0,35,0,0"
+                   Width="689"/>
+        <TextBox x:Name="TextOutput"
+                 HorizontalAlignment="Center" 
+                 Margin="0,0,0,0" 
+                 TextWrapping="Wrap" 
+                 Text="TextBox" 
+                 VerticalAlignment="Top"
+                 Width="689" 
+                 Height="347"/>
+        
+        <Button Content="File picker"
+                Click="OpenFilePicker"/>            
+                    
+        <Button Content="Open Debug View" 
+                HorizontalAlignment="Center" 
+                Margin="0,10,0,0"
+                Click="openDebugWindow"/>
+            
+
+        </StackPanel>
+                
+                </TabItem>
+            <TabItem Header="Burn view">
+                <StackPanel Width="200">
+                    <Label Content="Burn List"/>
+                <ListBox 
+                    x:Name="BurnViewListBox"
+                    Width="200"
+                    Height="300"
+                    SelectionChanged="ChooseBurnList"
+                    SelectionMode="Single"
+                    MouseDoubleClick="BurnViewListBox_MouseDoubleClick"
+                    />
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+        
+        
+    </Grid>
+</Window>

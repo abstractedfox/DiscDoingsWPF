@@ -1,0 +1,38 @@
+﻿<Window x:Class="DiscDoingsWPF.OneBurnViewDetails"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:DiscDoingsWPF"
+        mc:Ignorable="d"
+        Title="OneBurnViewDetails" Height="600" Width="400">
+    <Grid>
+        <StackPanel Orientation="Vertical" Margin="8,8,8,8">
+        <StackPanel Orientation="Horizontal">
+            <StackPanel Orientation="Vertical">
+                <Label Content="Name of this burn:"
+                       FontSize="12"/>
+                <Label Content="Size of volume:"
+                       FontSize="12"/>
+                <Label Content="Space used/unused:"
+                       FontSize="12"/>
+                </StackPanel>
+            <StackPanel Orientation="Vertical">
+                <Label x:Name="OneBurnViewDetails_BurnName"
+                    Content="Initialized Label"
+                       FontSize="12"/>
+                <Label x:Name="OneBurnViewDetails_VolumeSize"
+                    Content="Initialized Label"
+                       FontSize="12"/>
+                <Label x:Name="OneBurnViewDetails_SpaceUsedUnused"
+                    Content="Initialized Label"
+                       FontSize="12"/>
+                </StackPanel>
+            </StackPanel>
+            <ListBox 
+                x:Name="OneBurnListBox"
+                SelectionMode="Single"
+                Height="469" />
+        </StackPanel>
+    </Grid>
+</Window>
