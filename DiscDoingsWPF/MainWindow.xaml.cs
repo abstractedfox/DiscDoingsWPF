@@ -17,6 +17,7 @@ using System.Threading.Tasks;
 using Windows.Storage;
 using Windows.Foundation; //i think this may be necessary to use IAsyncOperation as part of the file picker 
 using System.IO;
+using Windows.Storage.Pickers;
 
 
 namespace DiscDoingsWPF
@@ -193,12 +194,29 @@ namespace DiscDoingsWPF
 
         private async void OpenFilePicker(object sender, RoutedEventArgs e)
         {
-            var picker = new Windows.Storage.Pickers.FileOpenPicker();
-            picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
-            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+            FileOpenPicker picker = new FileOpenPicker();
+            picker.ViewMode = PickerViewMode.List;
+            //picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+            picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+            picker.FileTypeFilter.Add("*");
 
-            Windows.Storage.StorageFile file = await picker.PickSingleFileAsync();
+            //Windows.Storage.StorageFile file = await picker.PickSingleFileAsync();
+
+            var win32moment = new System.Windows.Interop.WindowInteropHelper(this);
+            IntPtr handle = win32moment.Handle;
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, handle);
+            IReadOnlyList<StorageFile> files = await picker.PickMultipleFilesAsync();
+
+            string testoutput = "";
+            foreach (StorageFile file in files)
+            {
+                testoutput += file.Path + "\n";
+            }
+
+            debugEcho(testoutput);
+
         }
+
 
     }
 }

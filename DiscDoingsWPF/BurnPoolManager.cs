@@ -6,6 +6,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
+using Windows.Storage;
+using System.Text.RegularExpressions;
 
 namespace DiscDoingsWPF
 {
@@ -213,6 +215,57 @@ namespace DiscDoingsWPF
             allFiles.Add(newFile);
             return true;
         }
+
+
+        public bool addFile(StorageFile storageFileIn)
+        {
+            const string validPath = @"(^\\{2}.+\\(.)+[^\\]\.{1}(.)+ ?)|(([a-z]|[A-Z])+:\\.+[^\\]\.{1}.+ ?)";
+            Regex compare = new Regex(validPath);
+            
+            if (!storageFileIn.IsAvailable)
+            {
+                echoDebug("addFile(StorageFile) error: storageFileIn.IsAvailable = false for this file: " + storageFileIn.Path.ToString() + "\n");
+                return false;
+            }
+
+            if (!compare.IsMatch(storageFileIn.Path.ToString()))
+            {
+                echoDebug("addFile(StorageFile) error: File does not appear to match a valid system or network path with " +
+                    "filename and extension: " + storageFileIn.Path.ToString() + "\n");
+            }
+            
+
+            FileInfo fInfo = new FileInfo(storageFileIn.Path);
+            
+
+            string path = fInfo.FullName;
+
+            if (!fInfo.Exists)
+            {
+                error("addFile: Invalid path: " + path);
+                return false;
+            }
+
+            FileProps newFile = new FileProps();
+            newFile.fileName = getFilenameFromPath(path);
+            newFile.originalPath = path;
+            newFile.size = fInfo.Length;
+            newFile.timeAdded = DateTime.Now.ToString();
+            newFile.lastModified = fInfo.LastWriteTime.ToString();
+            newFile.isExtra = false;
+
+            string hashString = "";
+            byte[] hashtime = createHash(fInfo);
+            for (int i = 0; i < hashtime.Length; i++)
+            {
+                hashString += hashtime[i].ToString();
+            }
+            newFile.checksum = hashtime;
+
+            allFiles.Add(newFile);
+            return true;
+        }
+
 
         public static byte[] createHash(FileInfo fInfo)
         {
