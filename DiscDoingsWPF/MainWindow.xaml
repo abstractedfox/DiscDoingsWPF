@@ -11,28 +11,30 @@
         <TabControl>
             <TabItem Header="All Files">
                 <StackPanel>
-            <Label Content="All files"
-                   Margin ="0,35,0,0"
-                   Width="689"/>
-        <TextBox x:Name="TextOutput"
-                 HorizontalAlignment="Center" 
-                 Margin="0,0,0,0" 
-                 TextWrapping="Wrap" 
-                 Text="TextBox" 
-                 VerticalAlignment="Top"
-                 Width="689" 
-                 Height="347"/>
-        
-        <Button Content="File picker"
-                Click="OpenFilePicker"/>            
                     
-        <Button Content="Open Debug View" 
-                HorizontalAlignment="Center" 
-                Margin="0,10,0,0"
-                Click="openDebugWindow"/>
+                    <Label Content="All files"
+                       Margin ="0,35,0,0"
+                       Width="689"/>
+                    
+                    <TextBox x:Name="TextOutput"
+                     HorizontalAlignment="Center" 
+                     Margin="0,0,0,0" 
+                     TextWrapping="Wrap" 
+                     Text="TextBox" 
+                     VerticalAlignment="Top"
+                     Width="689" 
+                     Height="347"/>
+        
+                    <Button Content="File picker"
+                            Click="OpenFilePicker"/>            
+                    
+                    <Button Content="Open Debug View" 
+                            HorizontalAlignment="Center" 
+                            Margin="0,10,0,0"
+                            Click="openDebugWindow"/>
             
 
-        </StackPanel>
+                </StackPanel>
                 
                 </TabItem>
             <TabItem Header="Burn view">
