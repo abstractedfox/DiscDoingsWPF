@@ -5,42 +5,67 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DiscDoingsWPF"
         mc:Ignorable="d"
-        Title="MainWindow" Height="550" Width="800"
+        Title="MainWindow" Height="600" Width="800"
         x:Name="TheMainWindow">
+    
+    
     <Grid>
-        <TabControl>
-            <TabItem Header="All Files">
-                <StackPanel>
-                    
-                    <Label Content="All files"
+        <StackPanel>
+            <DockPanel>
+                <Menu DockPanel.Dock="Top">
+                    <MenuItem Header="_File">
+                        <MenuItem Header="_New" 
+                                  Click="New_Click"/>
+                        <MenuItem Header="_Open" 
+                                  Click="FileOpen_Click"/>
+                        <MenuItem Header="_Save" 
+                                  Click="FileSave_Click"/>
+                        <Separator />
+                        <MenuItem Header="_Exit" />
+                    </MenuItem>
+                </Menu>
+            </DockPanel>
+            <TabControl>
+                <TabItem Header="All Files">
+                    <StackPanel>
+
+                        <Label Content="All files"
                        Margin ="0,35,0,0"
                        Width="689"/>
-                    
-                    <TextBox x:Name="TextOutput"
+
+                        <TextBox x:Name="MainWindow_FileView"
                      HorizontalAlignment="Center" 
                      Margin="0,0,0,0" 
                      TextWrapping="Wrap" 
                      Text="TextBox" 
                      VerticalAlignment="Top"
                      Width="689" 
-                     Height="347"/>
-        
-                    <Button Content="File picker"
-                            Click="OpenFilePicker"/>            
-                    
-                    <Button Content="Open Debug View" 
+                     Height="347"
+                                 VerticalScrollBarVisibility="Auto"/>
+
+                        <Button Content="File picker"
+                                Click="OpenFilePicker"
+                                HorizontalAlignment="Center"/>
+
+
+                        <Button Content="Open Debug View" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
                             Click="openDebugWindow"/>
-            
+                        
+                        <Button Content="Mixed use button" 
+                            HorizontalAlignment="Center" 
+                            Margin="0,10,0,0"
+                            Click="MixedUseButton"/>
 
-                </StackPanel>
-                
+
+                    </StackPanel>
+
                 </TabItem>
-            <TabItem Header="Burn view">
-                <StackPanel Width="200">
-                    <Label Content="Burn List"/>
-                <ListBox 
+                <TabItem Header="Burn view">
+                    <StackPanel Width="200">
+                        <Label Content="Burn List"/>
+                        <ListBox 
                     x:Name="BurnViewListBox"
                     Width="200"
                     Height="300"
@@ -48,10 +73,22 @@
                     SelectionMode="Single"
                     MouseDoubleClick="BurnViewListBox_MouseDoubleClick"
                     />
-                </StackPanel>
-            </TabItem>
-        </TabControl>
-        
-        
+
+                        <Label Content="Volume Size (Bytes)"
+                               Margin="0,0,0,0"/>
+                        <TextBox
+                        x:Name="VolumeSizeTextInput"
+                        TextChanged="VolumeSizeTextInput_TextChanged"/>
+
+                        <Button
+                        Margin="0,15,0,0"
+                        Click="CalculateBurnListButtonClick">Calculate burn lists from files</Button>
+
+                    </StackPanel>
+
+                </TabItem>
+            </TabControl>
+
+        </StackPanel>
     </Grid>
 </Window>

@@ -10,6 +10,7 @@
         Closing="hideThis">
     <Grid>
         <TextBox x:Name="DebugOutputTextBox"
+                 VerticalScrollBarVisibility="Auto"
             HorizontalAlignment="Center" Margin="0,35,0,0" TextWrapping="Wrap" Text="TextBox" VerticalAlignment="Top" Width="689" Height="347"/>
         <StackPanel/>
 

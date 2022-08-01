@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Windows.Storage;
 using System.Text.RegularExpressions;
+using System.Windows;
 
 namespace DiscDoingsWPF
 {
@@ -15,10 +16,14 @@ namespace DiscDoingsWPF
     public class BurnPoolManager
     {
         public List<FileProps> allFiles { get; set; }
-        private string lastError;
+        public List<FileProps> allFilesNotInBurnQueue { get; set; }
+        private string? lastError;
         public string thisPool { get; set; } //The name of this pool
         public List<OneBurn> burnQueue { get; set; } //Burns which are ready
         public List<OneBurn> completedBurns { get; set; } //Burns which have been completed
+
+        public MainWindow? mainWindow; //This will be used to get access to the debug string in MainWindow
+
 
         //the get; set; properties do a lot of stuff but in this case they're necessary for serialization
 
@@ -44,6 +49,7 @@ namespace DiscDoingsWPF
             public long spaceUsed { get; set; }
             public List<FileProps> files { get; set; } //Files to be burned. Do not alter this directly!
             public string name { get; set; }
+            
             
 
             public OneBurn(long fileSizeBytes)
@@ -151,9 +157,86 @@ namespace DiscDoingsWPF
             burnQueue = new List<OneBurn>();
             completedBurns = new List<OneBurn>();
             thisPool = "Untitled Pool";
+            lastError = "";
+            mainWindow = null;
         }
 
+        public BurnPoolManager(MainWindow programMainWindow)
+        {
+            allFiles = new List<FileProps>();
+            burnQueue = new List<OneBurn>();
+            completedBurns = new List<OneBurn>();
+            thisPool = "Untitled Pool";
+            lastError = "";
+
+            mainWindow = programMainWindow;
+        }
+
+
+        //Copy constructor
+        
+        public BurnPoolManager(BurnPoolManager copySource)
+        {
+            //this.allFiles = copySource.allFiles;
+
+            if (copySource.allFiles == null) this.allFiles = new List<FileProps>();
+            else
+            {
+                this.allFiles = new List<FileProps>();
+                for (int i = 0; i < copySource.allFiles.Count; i++)
+                {
+                    this.allFiles.Add(copySource.allFiles[i]);
+                }
+            }
+
+            //this.burnQueue = copySource.burnQueue;
+            if (copySource.burnQueue == null) this.burnQueue = new List<OneBurn>();
+            else
+            {
+                this.burnQueue = new List<OneBurn>();
+                for (int i = 0; i < copySource.burnQueue.Count; i++)
+                {
+                    this.burnQueue.Add(copySource.burnQueue[i]);
+                }
+            }
+
+            //this.completedBurns = copySource.completedBurns;
+            if (copySource.completedBurns == null) this.completedBurns = new List<OneBurn>();
+            else
+            {
+                this.completedBurns = new List<OneBurn>();
+                for (int i = 0; i < copySource.completedBurns.Count; i++)
+                {
+                    this.completedBurns.Add(copySource.completedBurns[i]);
+                }
+            }
+
+            this.thisPool = copySource.thisPool;
+            this.lastError = copySource.lastError;
+            this.mainWindow = copySource.mainWindow;
+        }
+        
+
+        public static bool operator ==(BurnPoolManager a, BurnPoolManager b)
+        {
+            string aSerialized = JsonSerializer.Serialize(a);
+            string bSerialized = JsonSerializer.Serialize(b);
+            if (aSerialized == bSerialized) return true;
+            return false;
+        }
+
+        public static bool operator !=(BurnPoolManager a, BurnPoolManager b)
+        {
+            string aSerialized = JsonSerializer.Serialize(a), bSerialized = JsonSerializer.Serialize(b);
+            if (a != b) return true;
+            return false;
+        }
+
+
+
+
         //Pass a directory to a file in the file system and it will add that file. Returns true if it appears to work
+        //Important: Remove this once we switch to using allFilesNotInBurnQueue
         public bool addFile(string path)
         {
             FileInfo fInfo = new FileInfo(path);
@@ -185,6 +268,7 @@ namespace DiscDoingsWPF
         }
 
         //Pass a directory to a file in the file system and it will add that file. Returns true if it appears to work
+        //Important: Remove this once we switch to using allFilesNotInBurnQueue
         public bool addFile(FileInfo fInfo)
         {
             //FileInfo fInfo = new FileInfo(path);
@@ -216,7 +300,7 @@ namespace DiscDoingsWPF
             return true;
         }
 
-
+        //Important: Remove this once we switch to using allFilesNotInBurnQueue
         public bool addFile(StorageFile storageFileIn)
         {
             const string validPath = @"(^\\{2}.+\\(.)+[^\\]\.{1}(.)+ ?)|(([a-z]|[A-Z])+:\\.+[^\\]\.{1}.+ ?)";
@@ -230,8 +314,8 @@ namespace DiscDoingsWPF
 
             if (!compare.IsMatch(storageFileIn.Path.ToString()))
             {
-                echoDebug("addFile(StorageFile) error: File does not appear to match a valid system or network path with " +
-                    "filename and extension: " + storageFileIn.Path.ToString() + "\n");
+                echoDebug("addFile(StorageFile) error: File does not appear to be a valid system or network path with " +
+                    "path and extension: " + storageFileIn.Path.ToString() + "\n");
             }
             
 
@@ -240,11 +324,12 @@ namespace DiscDoingsWPF
 
             string path = fInfo.FullName;
 
+            /*
             if (!fInfo.Exists)
             {
                 error("addFile: Invalid path: " + path);
                 return false;
-            }
+            }*/
 
             FileProps newFile = new FileProps();
             newFile.fileName = getFilenameFromPath(path);
@@ -266,8 +351,75 @@ namespace DiscDoingsWPF
             return true;
         }
 
+        //Asyncrhonous version of the above function. addFileAsyncCounter is an int that will be incremented upon start of this function
+        //and decremented at the end, so the caller can keep track of how many outstanding operations are ongoing.
+        public Task addFileAsync(StorageFile storageFileIn, ref int addFileAsyncCounter)
+        {
+            const bool debugVerbose = true;
 
-        public static byte[] createHash(FileInfo fInfo)
+            const string validPath = @"(^\\{2}.+\\(.)+[^\\])|(([a-z]|[A-Z])+:\\.+[^\\])",
+                debugName = "addFileAsync:";
+            Regex compare = new Regex(validPath);
+
+            if (!storageFileIn.IsAvailable)
+            {
+                echoDebug(debugName + " error: storageFileIn.IsAvailable = false for this file: " + storageFileIn.Path.ToString() + "\n");
+                throw new Exception(debugName + "storageFileIn.IsAvailable = false for this file: " + storageFileIn.Path.ToString());
+                return null;
+            }
+
+            if (!compare.IsMatch(storageFileIn.Path.ToString()))
+            {
+                echoDebug("addFile(StorageFile) error: File does not appear to be a valid system or network path with " +
+                    "path and extension: " + storageFileIn.Path.ToString() + "\n");
+                throw new Exception(debugName + "error: File does not appear to be a valid system or network path with " +
+                    "path and extension: " + storageFileIn.Path.ToString());
+                return null;
+            }
+
+            try
+            {
+                mainWindow.filesInChecksumQueue++;
+            }
+            catch (NullReferenceException)
+            {
+                MessageBox.Show(debugName + "mainWindow reference is null.");
+                return null;
+            }
+
+            FileInfo fInfo = new FileInfo(storageFileIn.Path);
+
+
+            string path = fInfo.FullName;
+
+            return Task.Run(() => {
+                FileProps newFile = new FileProps();
+                newFile.fileName = getFilenameFromPath(path);
+                newFile.originalPath = path;
+                newFile.size = fInfo.Length;
+                newFile.timeAdded = DateTime.Now.ToString();
+                newFile.lastModified = fInfo.LastWriteTime.ToString();
+                newFile.isExtra = false;
+
+                string hashString = "";
+                byte[] hashtime = createHash(fInfo);
+                for (int i = 0; i < hashtime.Length; i++)
+                {
+                    hashString += hashtime[i].ToString();
+                }
+                newFile.checksum = hashtime;
+
+                allFiles.Add(newFile);
+                mainWindow.filesInChecksumQueue--;
+            });
+
+            //return doTheThing;
+
+            //return true;
+        }
+
+
+        public byte[] createHash(FileInfo fInfo)
         {
             const string debugName = "createHash:";
             //do the hashing
@@ -372,12 +524,17 @@ namespace DiscDoingsWPF
         //this one!
         public OneBurn generateBurnQueueButGood(long sizeInBytes)
         {
-            bool verbose = false;
+            const bool verbose = true;
             const string debugName = "generateBurnQueueButGood:";
             OneBurn aBurn = new OneBurn(sizeInBytes);
             aBurn.setName(thisPool + (burnQueue.Count + completedBurns.Count));
 
+            if (verbose) echoDebug(debugName + "Start");
+
             sortFilesBySize();
+
+            if (verbose) echoDebug(debugName + "Files sorted by size");
+
             for (int i = 0; i < allFiles.Count; i++) //Start with the biggest file that will fit
             {
                 if (aBurn.canAddFile(allFiles[i]) && !existsInBurnQueue(allFiles[i]))
@@ -389,7 +546,7 @@ namespace DiscDoingsWPF
 
             long spaceTarget = aBurn.spaceRemaining / 2;
             int passes = 0; //for debug purposes
-
+            if (verbose) echoDebug(debugName + "First file added, loopy next");
             do
             {
                 int? nextFile = findFileByNearestSize(allFiles, spaceTarget, aBurn.files, aBurn.spaceRemaining);
@@ -406,6 +563,8 @@ namespace DiscDoingsWPF
                 {
                     echoDebug(debugName + "Adding: " + allFiles[nextFileInt]);
                     passes++;
+                    mainWindow.debugEchoAsync(passes.ToString());
+                    if (passes > 5000) MessageBox.Show("Hey");
                 }
 
                 aBurn.addFile(allFiles[nextFileInt]);
@@ -418,6 +577,75 @@ namespace DiscDoingsWPF
             while (true);
 
             return aBurn;
+        }
+        
+        //New generate burn queue which will be faster and fancier than the old one
+        public void generateBurnQueue(ref List<FileProps> source, long sizeInBytes)
+        {
+            const bool verbose = true;
+            const string debugName = "generateBurnQueue:";
+            OneBurn aBurn = new OneBurn(sizeInBytes);
+            aBurn.setName(thisPool + (burnQueue.Count + completedBurns.Count));
+
+            if (verbose) echoDebug(debugName + "Start");
+
+            sortFilesBySize();
+
+            if (verbose) echoDebug(debugName + "Files sorted by size");
+
+            for (int i = 0; i < allFiles.Count; i++) //Start with the biggest file that will fit
+            {
+                if (aBurn.canAddFile(allFiles[i]) && !existsInBurnQueue(allFiles[i]))
+                {
+                    aBurn.addFile(allFiles[i]);
+                    break;
+                }
+            }
+
+            long spaceTarget = aBurn.spaceRemaining / 2;
+            int passes = 0; //for debug purposes
+            if (verbose) echoDebug(debugName + "First file added, loopy next");
+            do
+            {
+                int? nextFile = findFileByNearestSize(allFiles, spaceTarget, aBurn.files, aBurn.spaceRemaining);
+
+                if (verbose)
+                {
+                    echoDebug(debugName + " pass " + passes + " nextFile:" + nextFile + " spaceTarget = " + spaceTarget);
+                }
+
+                if (nextFile == null) break; //No suitable files were found
+                int nextFileInt = nextFile ?? default(int); //necessary to resolve the nullable int
+
+                if (verbose)
+                {
+                    echoDebug(debugName + "Adding: " + allFiles[nextFileInt]);
+                    passes++;
+                    mainWindow.debugEchoAsync(passes.ToString());
+                    if (passes > 5000) MessageBox.Show("Hey");
+                }
+
+                aBurn.addFile(allFiles[nextFileInt]);
+                //Note: findFileByNearestSize examines every file in the given List<FileProps> on each pass, and ignores any results that would
+                //not fit the limit or that are already in the burn list. For that reason, no additional checks should be needed here as it
+                //will return null if it can't find anything that fits these criteria
+
+                spaceTarget = aBurn.spaceRemaining / 2;
+            }
+            while (true);
+        }
+
+        //Sort the entire BurnPoolManager into OneBurns and populate burnQueue with them. Replaces any contents of burnQueue entirely.
+        public void generateAllBurnQueues(ulong sizeInBytes)
+        {
+            const string debugName = "generateAllBurnQueues:";
+            const bool debug = false;
+
+            burnQueue.Clear();
+            List<FileProps> tempList = new List<FileProps>();
+            tempList.AddRange(allFiles);
+            
+
         }
 
         //Search the burnQueue list for a OneBurn with the passed filename. If it finds a result, it returns its position in the list.
@@ -435,20 +663,51 @@ namespace DiscDoingsWPF
         //Sort the files in allFiles by size, with [0] being the largest.
         public void sortFilesBySize()
         {
+            const bool debug = true;
+            const string debugName = "sortFilesBySize:";
             FileProps temphold;
+            int iterations = 0, restarts = 0;
+
+            if (debug) echoDebug(debugName + "Start");
 
             if (allFiles.Count < 2) return;
 
             for(int i = 0; i < allFiles.Count - 1; i++)
             {
+                if (debug)
+                {
+                    iterations++;
+                    //if (iterations % 5000 == 0) echoDebug(iterations.ToString() + " " + restarts.ToString());
+                }
                 //Console.WriteLine(i + " About to compare " + allFiles[i].fileName + " " + allFiles[i].size + " to " +
                     //allFiles[i + 1].fileName + " " + allFiles[i + 1].size);
                 if(allFiles[i + 1].size > allFiles[i].size)
                 {
+                    if (debug)
+                    {
+                        if (restarts % 5000 == 0) echoDebug(restarts + ": " + allFiles[i + 1].size 
+                            + " is larger than " + allFiles[i].size);
+                    }
                     temphold = allFiles[i];
                     allFiles[i] = allFiles[i + 1];
                     allFiles[i + 1] = temphold;
-                    i = -1;
+                    
+                    //Keep moving it up the list as long as it's bigger than the one before it
+                    while (i > 0 && allFiles[i].size > allFiles[i - 1].size)
+                    {
+                        temphold = allFiles[i - 1];
+                        allFiles[i - 1] = allFiles[i];
+                        allFiles[i] = temphold;
+                        i--;
+                    }
+
+                    i = -1; //Start the main loop over from the top
+
+
+                    if (debug)
+                    {
+                        restarts++;
+                    }
                 }
             }
         }
@@ -637,6 +896,112 @@ namespace DiscDoingsWPF
 
         }
 
+        //Modify to no longer utilize the ignore list or check if a file is in the burn queue, only searching the List<FileProps> list
+        //for the nearest file
+        public int? findFileByNearestSizeA(List<FileProps> list, long target, List<FileProps> ignore, long maxSize)
+        {
+            bool verbose = false;
+            string debugName = "findFileByNearestSize:";
+            int? favorite = null;
+            Func<FileProps, List<FileProps>, long, bool> meetsConditions = (aFile, ignoreList, sizeLimit) =>
+                aFile.size <= maxSize && (!existsInBurnQueue(aFile));
+
+            if (verbose)
+            {
+                echoDebug(debugName + "Starting with target " + target + " and maxSize " + maxSize);
+            }
+
+            for (int i = 0; i < list.Count; i++) //Start with the favorite set to the biggest file that meets criteria
+            {
+                if (meetsConditions(list[i], ignore, maxSize)) favorite = i;
+            }
+
+            if (favorite == null) return favorite;
+            int favoriteInt = favorite ?? default(int);
+
+
+            if (list[favoriteInt].size <= target && meetsConditions(list[favoriteInt], ignore, maxSize))
+            {
+                if (verbose)
+                {
+                    echoDebug(debugName + "File " + list[favoriteInt].fileName + " with the size " + list[favoriteInt].size
+                        + " is less than or equal to "
+                        + target + " and meets conditions. Returning 0");
+                }
+                return favoriteInt;
+            }
+
+
+            if (list[favoriteInt].size > target)
+            {
+                if (verbose)
+                {
+                    echoDebug(debugName + "Element 0: " + list[0].fileName + " with the size " + list[0].size + " is larger than the target value of "
+                        + target);
+                }
+
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (list[i].size == target && meetsConditions(list[i], ignore, maxSize))
+                    {
+                        if (verbose)
+                        {
+                            echoDebug(debugName + list[i].fileName + " size " + list[i].size + " matches the target of " + target);
+                        }
+                        return i;
+                    }
+                    if (list[i].size > target && meetsConditions(list[i], ignore, maxSize))
+                    {
+                        if (verbose)
+                        {
+                            echoDebug(debugName + list[i].fileName + " size " + list[i].size + " is larger than the target of " + target
+                                + " and the favorite is being set to this file.");
+                        }
+                        favorite = i;
+
+                    }
+                    if (list[i].size < target && meetsConditions(list[i], ignore, maxSize))
+                    {
+                        if (target - list[i].size == favorite - target)
+                        {
+                            if (verbose)
+                            {
+                                echoDebug(debugName + list[i].fileName + " size " + list[i].size + " is less than the target of " + target
+                                    + " and has an equal distance from the target as the previous favorite. Returning the previous (larger) favorite.");
+                            }
+                            return favorite;
+                        }
+                        if (target - list[i].size < favorite - target)
+                        {
+                            if (verbose)
+                            {
+                                echoDebug(debugName + list[i].fileName + " size " + list[i].size + " is less than the target of " + target
+                                    + "and the difference is closer than the difference between the target and previous favorite. Returning this file.");
+                            }
+                            return i;
+                        }
+                        if (verbose)
+                        {
+                            int a = favorite ?? default(int);
+                            echoDebug(debugName + list[i].fileName + " size " + list[i].size + " is less than the target of " + target
+                                + " but is a greater difference from the target than the previous favorite. Returning the favorite value of: "
+                                + favorite + " which is " + list[a] + " " + list[a].size);
+                        }
+                        return favorite;
+                    }
+                }
+            }
+
+            if (verbose)
+            {
+                echoDebug(debugName + "The loop exited without returning a value. Returning " + favorite);
+            }
+
+            return favorite;
+
+
+        }
+
 
         //Substring for List<FileProps>s! Pass an int as an argument and it will return the contents of the original list
         //beginning from that index
@@ -770,11 +1135,29 @@ namespace DiscDoingsWPF
             return true;
         }
 
-        private static void echoDebug(string text)
+        private void echoDebug(string text)
         {
-            Console.WriteLine(text);
+            //Console.WriteLine(text);
+            if (mainWindow != null) mainWindow.debugEcho(text);
+            else
+            {
+                throw new NullReferenceException("mainWindow in BurnPoolManager is null, debug output failed.");
+            }
         }
 
+        private void echoDebugA(string text)
+        {
+            if (mainWindow != null) mainWindow.debugEchoAsync(text);
+            else
+            {
+                throw new NullReferenceException("mainWindow in BurnPoolManager is null, debug output failed.");
+            }
+        }
+
+        public void test()
+        {
+            echoDebug("WE are haveing a test!!");
+        }
         
 
     }
