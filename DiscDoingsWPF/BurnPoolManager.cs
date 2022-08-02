@@ -576,7 +576,7 @@ namespace DiscDoingsWPF
 
                 if (verbose)
                 {
-                    echoDebug(debugName + "Adding: " + allFiles[nextFileInt]);
+                    echoDebug(debugName + "Adding: " + allFilesNotInBurnQueue[nextFileInt]);
                     passes++;
                     mainWindow.debugEchoAsync(passes.ToString());
                     if (passes > 5000) MessageBox.Show("Hey");
