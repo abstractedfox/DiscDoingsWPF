@@ -28,9 +28,13 @@
             <TabControl>
                 <TabItem Header="All Files">
                     <StackPanel>
-
+                        <Label Content="Hello!"
+                       Margin ="0,0,0,0"
+                       Width="689"
+                               x:Name="StatusField"/>
+                        
                         <Label Content="All files"
-                       Margin ="0,35,0,0"
+                       Margin ="0,15,0,0"
                        Width="689"/>
 
                         <TextBox x:Name="MainWindow_FileView"
