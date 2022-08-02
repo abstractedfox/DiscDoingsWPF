@@ -39,11 +39,12 @@ namespace DiscDoingsWPF
     {
         string debugText = "Debug Output\n"; //Append any debug related messages to this string
         bool debugWindowOpen = false;
+        List<Task> fileAddTasks, burnQueueTasks;
         
         public BurnPoolManager burnpool;
         private BurnPoolManager lastSavedInstance; //Use to keep track of whether changes have been made
 
-        public int filesInChecksumQueue; //Keep track of how many files are waiting for checksum calculations
+        //public int filesInChecksumQueue; //Keep track of how many files are waiting for checksum calculations
 
         const string applicationName = "Burn Manager", applicationExtension = "chris";
 
@@ -51,6 +52,8 @@ namespace DiscDoingsWPF
         {
             
             InitializeComponent();
+            fileAddTasks = new List<Task>();
+            burnQueueTasks = new List<Task>();
             
             startBurnPool();
 
@@ -58,7 +61,7 @@ namespace DiscDoingsWPF
 
         private void test()
         {
-            burnpool.generateAllBurnQueues(2000000);
+            
         }
 
          
@@ -121,64 +124,17 @@ namespace DiscDoingsWPF
             lastSavedInstance = new BurnPoolManager(burnpool);
         }
 
-
-        //Add an entire directory to the burn list.
-        private bool addDirToBurnList(ref BurnPoolManager list, string dir, bool recursive)
+        private async Task generateBurnListsForPoolAsyncA(long volumeSize)
         {
-            const string debugName = "addDirToBurnList:";
-            DirectoryInfo directory = new DirectoryInfo(dir);
-
-            if (!directory.Exists)
-            {
-                debugEcho(debugName + "Directory " + dir + " is invalid.");
-                return false;
-            }
-
-            FileInfo[] files = directory.GetFiles();
-
-            for (int i = 0; i < files.Length; i++)
-            {
-                list.addFile(files[i]);
-            }
-
-            return true;
-        }
-
-
-        //Calls BurnPoolManager::generateBurnQueueButGood until all files have been sorted into burn lists.
-        
-        private BurnPoolManager generateBurnListsForPool(BurnPoolManager burnPool, long volumeSize)
-        {
-            debugEcho("generateBurnListsForPool: Start");
+            debugEcho("generateBurnListsForPoolAsyncA: Start");
             BurnPoolManager.OneBurn aBurn = new BurnPoolManager.OneBurn();
 
-            do
+            await Task.Run(() =>
             {
-                aBurn = burnPool.generateBurnQueueButGood(volumeSize);
-
-                if (aBurn.files.Count > 0)
-                {
-                    burnPool.burnQueue.Add(aBurn);
-                }
-
-            }
-            while (aBurn.files.Count > 0);
-            debugEcho("generateBurnListsForPool: Done");
-            //populateBurnWindow();
-            return burnPool;
-        }
-
-        //Calls generateBurnListsForPool asynchronously
-        private async Task<BurnPoolManager> generateBurnListsForPoolAsync(BurnPoolManager burnPool, long volumeSize)
-        {
-            debugEcho("generateBurnListsForPoolAsync: Start");
-            BurnPoolManager.OneBurn aBurn = new BurnPoolManager.OneBurn();
-
-            return await Task.Run<BurnPoolManager>(() =>
-            {
-                return new BurnPoolManager(generateBurnListsForPool(burnPool, volumeSize));
+                while (burnpool.generateOneBurn(volumeSize));
+                //yes this works; generateOneBurn returns false once it can no longer generate a OneBurn
             });
-            
+
 
             //return burnPool;
         }
@@ -247,10 +203,17 @@ namespace DiscDoingsWPF
                 System.Windows.MessageBox.Show("Unknown exception", applicationName);
                 return;
             }
+            if (getPendingTasks() == 0)
+            {
+                burnQueueTasks.Add(generateBurnListsForPoolAsyncA(volumeSize));
+                updateAllWindowsWhenTasksComplete();
+                cleanUpTaskLists();
+            }
+            else
+            {
+                operationsInProgressDialog();
+            }
 
-            await generateBurnListsForPoolAsync(burnpool, volumeSize);
-            updateAllWindows();
-            
         }
 
 
@@ -261,15 +224,26 @@ namespace DiscDoingsWPF
         }
 
         //Opens the file picker and adds any files chosen to the burn pool.
+        //At the moment this function does not check for outstanding fileAddTasks as it seems to work fine adding more files to
+        //the list while operations are pending. However, it does check for burnQueueTasks
         private async void OpenFilePicker(object sender, RoutedEventArgs e)
         {
             const bool debugVerbose = true;
             const string debugName = "OpenFilePicker:";
             FileOpenPicker picker = new FileOpenPicker();
+            //List < Task > tasks = new List<Task>();
             picker.ViewMode = PickerViewMode.List;
             //picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
             picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
             picker.FileTypeFilter.Add("*");
+
+
+            if (getBurnQueueTasks() > 0)
+            {
+                System.Windows.MessageBox.Show("Burn queue operation in progress. Please wait for burn queue " +
+                    "to finish before adding more files.");
+                return;
+            }
 
             //Windows.Storage.StorageFile file = await picker.PickSingleFileAsync();
 
@@ -284,34 +258,46 @@ namespace DiscDoingsWPF
                 debugEcho(debugName + "IReadOnlyList<StorageFile> files is now populated");
             }
 
-            int filesPrior = burnpool.allFiles.Count;
-            foreach (StorageFile file in files)
-            {
-                //burnpool.addFile(file);
-                try
-                {
-                    burnpool.addFileAsync(file, ref filesInChecksumQueue);
-                }
-                catch
-                {
-                    debugEcho(debugName + "Exception while adding files to the burnpool.");
-                    System.Windows.MessageBox.Show(debugName + "Exception while adding files to the burnpool.", applicationName);
-                }
-            }
+            
 
-            int previousFilesInChecksumQueue = filesInChecksumQueue;
-            debugEcho(debugName + "Files in processing queue: " + filesInChecksumQueue);
-            while (filesInChecksumQueue > 0)
-            {
-                if (filesInChecksumQueue < previousFilesInChecksumQueue)
+            await Task.Run(() => { 
+                //int filesPrior = burnpool.allFiles.Count;
+                foreach (StorageFile file in files)
                 {
-                    previousFilesInChecksumQueue = filesInChecksumQueue;
-                    debugEcho(debugName + "Files in processing queue: " + filesInChecksumQueue);
+                    //burnpool.addFile(file);
+                    try
+                    {
+                        fileAddTasks.Add(burnpool.addFileAsync(file));
+                    }
+                    catch
+                    {
+                        debugEcho(debugName + "Exception while adding files to the burnpool.");
+                        System.Windows.MessageBox.Show(debugName + "Exception while adding files to the burnpool.", applicationName);
+                    }
                 }
-                await Task.Delay(1000);
-                //debugEcho(debugName + "Waiting for checksums");
-            }
+            
 
+                int tasksInProgress = 0, lastTasksInProgress = 0;
+                do
+                {
+                    tasksInProgress = 0;
+                    for (int i = 0; i < fileAddTasks.Count; i++)
+                    {
+                        if (!fileAddTasks[i].IsCompleted)
+                        {
+                            tasksInProgress++;
+                        }
+                    }
+                    if (tasksInProgress != lastTasksInProgress && debugVerbose)
+                    {
+                        debugEcho(debugName + "Tasks in progress: " + tasksInProgress);
+                        lastTasksInProgress = tasksInProgress;
+                    }
+                    //StatusField.Content = (debugName + "Tasks in progress: " + tasksInProgress);
+
+                }
+                while (tasksInProgress > 0);
+            });
 
             if (debugVerbose)
             {
@@ -319,7 +305,9 @@ namespace DiscDoingsWPF
                 debugEcho(debugName + "All files have been added to burnpool");
             }
 
-            updateMainScreenFileView();
+            updateAllWindowsWhenTasksComplete();
+            cleanUpTaskLists();
+            //updateAllWindows();
 
 
         }
@@ -347,12 +335,61 @@ namespace DiscDoingsWPF
             populateBurnWindow();
         }
 
-
-        //Function to be called when the user attempts to exit or start a new file while operations are in progress
-        private void operationsInProgress()
+        private async void updateAllWindowsWhenTasksComplete()
         {
-
+            await Task.Run(() =>
+            {
+                while (getPendingTasks() > 0) ;
+            });
+            updateAllWindows();
         }
+
+        private int getPendingTasks()
+        {
+            int tasks = 0;
+            for (int i = 0; i < fileAddTasks.Count; i++)
+            {
+                if (!fileAddTasks[i].IsCompleted) tasks++;
+            }
+            for (int i = 0; i < burnQueueTasks.Count; i++)
+            {
+                if (!burnQueueTasks[i].IsCompleted) tasks++;
+            }
+            return tasks;
+        }
+
+        private int getBurnQueueTasks()
+        {
+            int tasks = 0;
+            for (int i = 0; i < burnQueueTasks.Count; i++)
+            {
+                if (!burnQueueTasks[i].IsCompleted) tasks++;
+            }
+            return tasks;
+        }
+
+        //Removes all completed tasks from fileAddTasks and burnQueueTasks
+        private void cleanUpTaskLists()
+        {
+            for (int i = 0; i < fileAddTasks.Count; i++)
+            {
+                if (fileAddTasks[i].IsCompleted)
+                {
+                    fileAddTasks.RemoveAt(i);
+                    i = -1;
+                }
+            }
+            for (int i = 0; i < fileAddTasks.Count; i++)
+            {
+                if (burnQueueTasks[i].IsCompleted)
+                {
+                    burnQueueTasks.RemoveAt(i);
+                    i = -1;
+                }
+            }
+        }
+
+
 
         //Detect whether changes have been made since the file was last saved, or since a new file was created
         private bool changesMade()
@@ -420,7 +457,10 @@ namespace DiscDoingsWPF
             }
         }
 
-
+        private void operationsInProgressDialog()
+        {
+            System.Windows.MessageBox.Show("Some operations are still in progress. Please wait until operations complete.");
+        }
 
                     //Top menu bar items start below
 
@@ -428,72 +468,24 @@ namespace DiscDoingsWPF
         private void FileSave_Click(object sender, RoutedEventArgs e)
         {
             const string debugName = "FileSave_Click:";
+            if (getPendingTasks() > 0)
+            {
+                operationsInProgressDialog();
+                return;
+            }
             saveFileDialog();
-            /*
-            string serialized = "";
-            try
-            {
-                serialized = JsonSerializer.Serialize(burnpool);
-                //debugEcho("SQUEEBY\n" + serialized);
-            }
-            catch
-            {
-                debugEcho("FileSave_Click: Exception thrown using JsonSerializer.Serialize()");
-                System.Windows.MessageBox.Show("FileSave_Click: Exception thrown using JsonSerializer.Serialize()");
-                return;
-            }
-
-            if (serialized == null)
-            {
-                debugEcho(debugName + "serialized == null");
-                return;
-            }
-
-            try
-            {
-                Stream aStream;
-                SaveFileDialog saveDialog = new SaveFileDialog();
-
-                saveDialog.Filter = "*." + applicationExtension + "|All Files(*.*)";
-                saveDialog.DefaultExt = applicationExtension;
-                
-                if (saveDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                {
-                    if ((aStream = saveDialog.OpenFile()) != null)
-                    {
-                        byte[] toBytes = new byte[serialized.Length];
-                        for (int i = 0; i < serialized.Length; i++) toBytes[i] = (byte)serialized[i];
-
-                        aStream.Write(toBytes);
-                        aStream.Close();
-                        lastSavedInstance = burnpool;
-                    }
-                    else
-                    {
-                        debugEcho(debugName + "saveDialog.OpenFile() did not != null");
-                    }
-                }
-                else
-                {
-                    debugEcho(debugName + "saveDialog.ShowDialog() did not == System.Windows.Forms.DialogResult.OK");
-                }
-            }
-            catch
-            {
-                debugEcho(debugName + "Unknown exception");
-            }
-            */
         }
 
         private void New_Click(object sender, RoutedEventArgs e)
         {
             const string debugName = "New_Click():";
-            if (filesInChecksumQueue > 0)
+
+            if (getPendingTasks() > 0)
             {
-                debugEcho(debugName + "There are " + filesInChecksumQueue + " operations pending in the checksum queue.");
-                operationsInProgress();
+                operationsInProgressDialog();
                 return;
             }
+
 
             if (changesMade())
             {
@@ -515,13 +507,19 @@ namespace DiscDoingsWPF
 
         private void MixedUseButton(object sender, RoutedEventArgs e)
         {
-            test();
+            //test();
         }
 
         private async void FileOpen_Click(object sender, RoutedEventArgs e)
         {
             const bool debugVerbose = false;
             const string debugName = "FileLoad_Click:";
+
+            if (getPendingTasks() > 0)
+            {
+                operationsInProgressDialog();
+                return;
+            }
 
             if (changesMade())
             {
@@ -559,6 +557,10 @@ namespace DiscDoingsWPF
 
                 try
                 {
+                    if (file.FileType != "." + applicationExtension)
+                    {
+                        System.Windows.MessageBox.Show("File extension " + file.FileType + " is invalid.");
+                    }
                     string serializedJson = await Windows.Storage.FileIO.ReadTextAsync(file);
                     if (serializedJson == null)
                     {
@@ -568,8 +570,32 @@ namespace DiscDoingsWPF
 
                     burnpool = new BurnPoolManager(this);
 
-
-                    burnpool = JsonSerializer.Deserialize<BurnPoolManager>(serializedJson);
+                    try
+                    {
+                        burnpool = JsonSerializer.Deserialize<BurnPoolManager>(serializedJson);
+                    }
+                    catch (ArgumentNullException)
+                    {
+                        const string errortext = debugName + "JsonSerializer.Deserialize<BurnPoolManager>(serializedJson): serializedJson = null";
+                        debugEcho(errortext);
+                        System.Windows.MessageBox.Show(errortext);
+                        return;
+                    }
+                    catch (JsonException)
+                    {
+                        const string errortext = debugName + "JsonSerializer.Deserialize<BurnPoolManager>(serializedJson): JsonException." +
+                            " File may be formatted incorrectly or corrupt.";
+                        debugEcho(errortext);
+                        System.Windows.MessageBox.Show(errortext);
+                        return;
+                    }
+                    catch
+                    {
+                        const string errortext = debugName + "JsonSerializer.Deserialize<BurnPoolManager>(serializedJson): Unknown exception.";
+                        debugEcho(errortext);
+                        System.Windows.MessageBox.Show(errortext);
+                        return;
+                    }
                     burnpool.mainWindow = this;
                     lastSavedInstance = new BurnPoolManager(burnpool);
                     updateMainScreenFileView();

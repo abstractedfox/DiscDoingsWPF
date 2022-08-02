@@ -21,9 +21,19 @@ namespace DiscDoingsWPF
         public string thisPool { get; set; } //The name of this pool
         public List<OneBurn> burnQueue { get; set; } //Burns which are ready
         public List<OneBurn> completedBurns { get; set; } //Burns which have been completed
-
+        public hashTypes hashTypeUsed { get; set; }
         public MainWindow? mainWindow; //This will be used to get access to the debug string in MainWindow
 
+        public const int formatVersion = 1;
+        //formatVersion 1 adds the hashTypes enum, the hashType field to FileProps,
+        //the HashTypeUsed field to BurnPoolManager, the createHashMD5 function, and this field indicating the format version.
+
+
+        public enum hashTypes
+        {
+            MD5,
+            SHA256
+        }
 
         //the get; set; properties do a lot of stuff but in this case they're necessary for serialization
 
@@ -36,6 +46,7 @@ namespace DiscDoingsWPF
             public long size { get; set; } //Size in bytes
             public byte[] checksum { get; set; } //Checksum of this file
             public string timeAdded { get; set; } //Date and time added to this pool
+            public hashTypes hashType { get; set; }
 
             public string lastModified { get; set; } //Last modified time from file system
             public bool isExtra { get; set; } //Set this flag to true if this file is intentionally meant to be burned to more than one disc
@@ -154,21 +165,24 @@ namespace DiscDoingsWPF
         public BurnPoolManager()
         {
             allFiles = new List<FileProps>();
+            allFilesNotInBurnQueue = new List<FileProps>();
             burnQueue = new List<OneBurn>();
             completedBurns = new List<OneBurn>();
             thisPool = "Untitled Pool";
             lastError = "";
+            hashTypeUsed = hashTypes.SHA256;
             mainWindow = null;
         }
 
         public BurnPoolManager(MainWindow programMainWindow)
         {
             allFiles = new List<FileProps>();
+            allFilesNotInBurnQueue = new List<FileProps>();
             burnQueue = new List<OneBurn>();
             completedBurns = new List<OneBurn>();
             thisPool = "Untitled Pool";
             lastError = "";
-
+            hashTypeUsed = hashTypes.SHA256;
             mainWindow = programMainWindow;
         }
 
@@ -177,6 +191,7 @@ namespace DiscDoingsWPF
         
         public BurnPoolManager(BurnPoolManager copySource)
         {
+            const string debugName = "BurnPoolManager(BurnPoolManager copySource) (copy function):";
             //this.allFiles = copySource.allFiles;
 
             if (copySource.allFiles == null) this.allFiles = new List<FileProps>();
@@ -186,6 +201,16 @@ namespace DiscDoingsWPF
                 for (int i = 0; i < copySource.allFiles.Count; i++)
                 {
                     this.allFiles.Add(copySource.allFiles[i]);
+                }
+            }
+
+            if (copySource.allFilesNotInBurnQueue == null) this.allFilesNotInBurnQueue = new List<FileProps>();
+            else
+            {
+                this.allFilesNotInBurnQueue = new List<FileProps>();
+                for (int i = 0; i < copySource.allFilesNotInBurnQueue.Count; i++)
+                {
+                    this.allFilesNotInBurnQueue.Add(copySource.allFilesNotInBurnQueue[i]);
                 }
             }
 
@@ -211,6 +236,17 @@ namespace DiscDoingsWPF
                 }
             }
 
+            if (copySource.hashTypeUsed == null)
+            {
+                //If there is no hashTypeUsed then the type is most likely SHA256, since that was what was used before MD5 was made default
+                this.hashTypeUsed = hashTypes.SHA256;
+                echoDebug(debugName + "No hash type was found in the source file. Assuming SHA256.");
+            }
+            else
+            {
+                this.hashTypeUsed = copySource.hashTypeUsed;
+            }
+
             this.thisPool = copySource.thisPool;
             this.lastError = copySource.lastError;
             this.mainWindow = copySource.mainWindow;
@@ -233,127 +269,8 @@ namespace DiscDoingsWPF
         }
 
 
-
-
-        //Pass a directory to a file in the file system and it will add that file. Returns true if it appears to work
-        //Important: Remove this once we switch to using allFilesNotInBurnQueue
-        public bool addFile(string path)
-        {
-            FileInfo fInfo = new FileInfo(path);
-
-            if (!fInfo.Exists)
-            {
-                error("addFile: Invalid path: " + path);
-                return false;
-            }
-
-            FileProps newFile = new FileProps();
-            newFile.fileName = getFilenameFromPath(path);
-            newFile.originalPath = path;
-            newFile.size = fInfo.Length;
-            newFile.timeAdded = DateTime.Now.ToString();
-            newFile.lastModified = fInfo.LastWriteTime.ToString();
-            newFile.isExtra = false;
-
-            string hashString = "";
-            byte[] hashtime = createHash(fInfo);
-            for (int i = 0; i < hashtime.Length; i++)
-            {
-                hashString += hashtime[i].ToString();
-            }
-            newFile.checksum = hashtime;
-
-            allFiles.Add(newFile);
-            return true;
-        }
-
-        //Pass a directory to a file in the file system and it will add that file. Returns true if it appears to work
-        //Important: Remove this once we switch to using allFilesNotInBurnQueue
-        public bool addFile(FileInfo fInfo)
-        {
-            //FileInfo fInfo = new FileInfo(path);
-            string path = fInfo.FullName;
-
-            if (!fInfo.Exists)
-            {
-                error("addFile: Invalid path: " + path);
-                return false;
-            }
-
-            FileProps newFile = new FileProps();
-            newFile.fileName = getFilenameFromPath(path);
-            newFile.originalPath = path;
-            newFile.size = fInfo.Length;
-            newFile.timeAdded = DateTime.Now.ToString();
-            newFile.lastModified = fInfo.LastWriteTime.ToString();
-            newFile.isExtra = false;
-
-            string hashString = "";
-            byte[] hashtime = createHash(fInfo);
-            for (int i = 0; i < hashtime.Length; i++)
-            {
-                hashString += hashtime[i].ToString();
-            }
-            newFile.checksum = hashtime;
-
-            allFiles.Add(newFile);
-            return true;
-        }
-
-        //Important: Remove this once we switch to using allFilesNotInBurnQueue
-        public bool addFile(StorageFile storageFileIn)
-        {
-            const string validPath = @"(^\\{2}.+\\(.)+[^\\]\.{1}(.)+ ?)|(([a-z]|[A-Z])+:\\.+[^\\]\.{1}.+ ?)";
-            Regex compare = new Regex(validPath);
-            
-            if (!storageFileIn.IsAvailable)
-            {
-                echoDebug("addFile(StorageFile) error: storageFileIn.IsAvailable = false for this file: " + storageFileIn.Path.ToString() + "\n");
-                return false;
-            }
-
-            if (!compare.IsMatch(storageFileIn.Path.ToString()))
-            {
-                echoDebug("addFile(StorageFile) error: File does not appear to be a valid system or network path with " +
-                    "path and extension: " + storageFileIn.Path.ToString() + "\n");
-            }
-            
-
-            FileInfo fInfo = new FileInfo(storageFileIn.Path);
-            
-
-            string path = fInfo.FullName;
-
-            /*
-            if (!fInfo.Exists)
-            {
-                error("addFile: Invalid path: " + path);
-                return false;
-            }*/
-
-            FileProps newFile = new FileProps();
-            newFile.fileName = getFilenameFromPath(path);
-            newFile.originalPath = path;
-            newFile.size = fInfo.Length;
-            newFile.timeAdded = DateTime.Now.ToString();
-            newFile.lastModified = fInfo.LastWriteTime.ToString();
-            newFile.isExtra = false;
-
-            string hashString = "";
-            byte[] hashtime = createHash(fInfo);
-            for (int i = 0; i < hashtime.Length; i++)
-            {
-                hashString += hashtime[i].ToString();
-            }
-            newFile.checksum = hashtime;
-
-            allFiles.Add(newFile);
-            return true;
-        }
-
-        //Asyncrhonous version of the above function. addFileAsyncCounter is an int that will be incremented upon start of this function
-        //and decremented at the end, so the caller can keep track of how many outstanding operations are ongoing.
-        public Task addFileAsync(StorageFile storageFileIn, ref int addFileAsyncCounter)
+        //Asyncrhonously adds a file to the burnpool. Excepts if storageFileIn is null or does not appear to be a valid path
+        public Task addFileAsync(StorageFile storageFileIn)
         {
             const bool debugVerbose = true;
 
@@ -367,6 +284,12 @@ namespace DiscDoingsWPF
                 throw new Exception(debugName + "storageFileIn.IsAvailable = false for this file: " + storageFileIn.Path.ToString());
                 return null;
             }
+            if (storageFileIn == null)
+            {
+                echoDebug(debugName + " error: storageFileIn == null");
+                throw new NullReferenceException(debugName + " error: storageFileIn == null");
+                return null;
+            }
 
             if (!compare.IsMatch(storageFileIn.Path.ToString()))
             {
@@ -377,15 +300,6 @@ namespace DiscDoingsWPF
                 return null;
             }
 
-            try
-            {
-                mainWindow.filesInChecksumQueue++;
-            }
-            catch (NullReferenceException)
-            {
-                MessageBox.Show(debugName + "mainWindow reference is null.");
-                return null;
-            }
 
             FileInfo fInfo = new FileInfo(storageFileIn.Path);
 
@@ -410,18 +324,27 @@ namespace DiscDoingsWPF
                 newFile.checksum = hashtime;
 
                 allFiles.Add(newFile);
-                mainWindow.filesInChecksumQueue--;
+                allFilesNotInBurnQueue.Add(newFile);
+                //mainWindow.filesInChecksumQueue--;
             });
 
-            //return doTheThing;
-
-            //return true;
         }
 
 
         public byte[] createHash(FileInfo fInfo)
         {
             const string debugName = "createHash:";
+            if (hashTypeUsed == hashTypes.SHA256) return (createHashSHA256(fInfo));
+            if (hashTypeUsed == hashTypes.MD5) return (createHashMD5(fInfo));
+
+            echoDebug(debugName + "Checksum error: hashTypeUsed appears to be invalid: " + hashTypeUsed);
+            return new byte[0];
+        }
+
+
+        public byte[] createHashSHA256(FileInfo fInfo)
+        {
+            const string debugName = "createHashSHA256:";
             //do the hashing
             using (SHA256 hashtime = SHA256.Create())
             {
@@ -431,13 +354,13 @@ namespace DiscDoingsWPF
                     {
                         byte[] hashValue = hashtime.ComputeHash(dataToHash);
                         return hashValue;
-                        
+
                     }
                 }
                 catch (IOException exception)
                 {
                     echoDebug(debugName + "Exception thrown:" + exception);
-                    
+
                 }
                 catch (UnauthorizedAccessException exception)
                 {
@@ -445,6 +368,38 @@ namespace DiscDoingsWPF
                 }
             }
 
+            echoDebug(debugName + "Checksum error: Exited using block without returning a value.");
+            return new byte[0];
+
+        }
+
+        public byte[] createHashMD5(FileInfo fInfo)
+        {
+            const string debugName = "createHashMD5:";
+            //do the hashing
+            using (MD5 hashtime = MD5.Create())
+            {
+                try
+                {
+                    using (FileStream dataToHash = fInfo.Open(FileMode.Open))
+                    {
+                        byte[] hashValue = hashtime.ComputeHash(dataToHash);
+                        return hashValue;
+
+                    }
+                }
+                catch (IOException exception)
+                {
+                    echoDebug(debugName + "Exception thrown:" + exception);
+
+                }
+                catch (UnauthorizedAccessException exception)
+                {
+                    echoDebug(debugName + "Exception thrown:" + exception);
+                }
+            }
+
+            echoDebug(debugName + "Checksum error: Exited using block without returning a value.");
             return new byte[0];
 
         }
@@ -522,6 +477,7 @@ namespace DiscDoingsWPF
         }
 
         //this one!
+        //nevermind not this one
         public OneBurn generateBurnQueueButGood(long sizeInBytes)
         {
             const bool verbose = true;
@@ -578,12 +534,12 @@ namespace DiscDoingsWPF
 
             return aBurn;
         }
-        
-        //New generate burn queue which will be faster and fancier than the old one
-        public void generateBurnQueue(ref List<FileProps> source, long sizeInBytes)
+
+        //Generate a OneBurn and add it to the queue. Returns false if a OneBurn can't be generated.
+        public bool generateOneBurn(long sizeInBytes)
         {
             const bool verbose = true;
-            const string debugName = "generateBurnQueue:";
+            const string debugName = "generateOneBurn:";
             OneBurn aBurn = new OneBurn(sizeInBytes);
             aBurn.setName(thisPool + (burnQueue.Count + completedBurns.Count));
 
@@ -605,9 +561,10 @@ namespace DiscDoingsWPF
             long spaceTarget = aBurn.spaceRemaining / 2;
             int passes = 0; //for debug purposes
             if (verbose) echoDebug(debugName + "First file added, loopy next");
+
             do
             {
-                int? nextFile = findFileByNearestSize(allFiles, spaceTarget, aBurn.files, aBurn.spaceRemaining);
+                int? nextFile = findFileByNearestSizeA(allFilesNotInBurnQueue, spaceTarget, aBurn.spaceRemaining);
 
                 if (verbose)
                 {
@@ -624,29 +581,29 @@ namespace DiscDoingsWPF
                     mainWindow.debugEchoAsync(passes.ToString());
                     if (passes > 5000) MessageBox.Show("Hey");
                 }
-
-                aBurn.addFile(allFiles[nextFileInt]);
+                aBurn.addFile(allFilesNotInBurnQueue[nextFileInt]);
+                allFilesNotInBurnQueue.RemoveAt(nextFileInt);
                 //Note: findFileByNearestSize examines every file in the given List<FileProps> on each pass, and ignores any results that would
                 //not fit the limit or that are already in the burn list. For that reason, no additional checks should be needed here as it
                 //will return null if it can't find anything that fits these criteria
 
                 spaceTarget = aBurn.spaceRemaining / 2;
             }
-            while (true);
-        }
-
-        //Sort the entire BurnPoolManager into OneBurns and populate burnQueue with them. Replaces any contents of burnQueue entirely.
-        public void generateAllBurnQueues(ulong sizeInBytes)
-        {
-            const string debugName = "generateAllBurnQueues:";
-            const bool debug = false;
-
-            burnQueue.Clear();
-            List<FileProps> tempList = new List<FileProps>();
-            tempList.AddRange(allFiles);
+            while (true || allFilesNotInBurnQueue.Count > 0);
+            if (aBurn.files.Count > 0)
+            {
+                burnQueue.Add(aBurn);
+                if (verbose) echoDebug(debugName + "aBurn generated, exiting " + debugName);
+                return true;
+            }
+            else
+            {
+                if (verbose) echoDebug(debugName + "aBurn was not generated, exiting " + debugName);
+                return false;
+            }
             
-
         }
+
 
         //Search the burnQueue list for a OneBurn with the passed filename. If it finds a result, it returns its position in the list.
         //If there is no result, it returns null.
@@ -663,7 +620,7 @@ namespace DiscDoingsWPF
         //Sort the files in allFiles by size, with [0] being the largest.
         public void sortFilesBySize()
         {
-            const bool debug = true;
+            const bool debug = false;
             const string debugName = "sortFilesBySize:";
             FileProps temphold;
             int iterations = 0, restarts = 0;
@@ -898,29 +855,28 @@ namespace DiscDoingsWPF
 
         //Modify to no longer utilize the ignore list or check if a file is in the burn queue, only searching the List<FileProps> list
         //for the nearest file
-        public int? findFileByNearestSizeA(List<FileProps> list, long target, List<FileProps> ignore, long maxSize)
+        public int? findFileByNearestSizeA(List<FileProps> list, long target, long maxSize)
         {
-            bool verbose = false;
-            string debugName = "findFileByNearestSize:";
+            bool verbose = true;
+            string debugName = "findFileByNearestSizeA:";
             int? favorite = null;
-            Func<FileProps, List<FileProps>, long, bool> meetsConditions = (aFile, ignoreList, sizeLimit) =>
-                aFile.size <= maxSize && (!existsInBurnQueue(aFile));
+            Func<FileProps, long, bool> meetsConditions = (aFile, sizeLimit) => (aFile.size <= maxSize);
 
             if (verbose)
             {
                 echoDebug(debugName + "Starting with target " + target + " and maxSize " + maxSize);
             }
 
-            for (int i = 0; i < list.Count; i++) //Start with the favorite set to the biggest file that meets criteria
+            for (int i = 0; i < list.Count; i++) //Set the favorite to the biggest file that meets criteria
             {
-                if (meetsConditions(list[i], ignore, maxSize)) favorite = i;
+                if (meetsConditions(list[i], maxSize)) favorite = i;
             }
 
             if (favorite == null) return favorite;
             int favoriteInt = favorite ?? default(int);
 
 
-            if (list[favoriteInt].size <= target && meetsConditions(list[favoriteInt], ignore, maxSize))
+            if (list[favoriteInt].size <= target && meetsConditions(list[favoriteInt], maxSize))
             {
                 if (verbose)
                 {
@@ -942,7 +898,7 @@ namespace DiscDoingsWPF
 
                 for (int i = 0; i < list.Count; i++)
                 {
-                    if (list[i].size == target && meetsConditions(list[i], ignore, maxSize))
+                    if (list[i].size == target && meetsConditions(list[i], maxSize))
                     {
                         if (verbose)
                         {
@@ -950,7 +906,7 @@ namespace DiscDoingsWPF
                         }
                         return i;
                     }
-                    if (list[i].size > target && meetsConditions(list[i], ignore, maxSize))
+                    if (list[i].size > target && meetsConditions(list[i],maxSize))
                     {
                         if (verbose)
                         {
@@ -960,7 +916,7 @@ namespace DiscDoingsWPF
                         favorite = i;
 
                     }
-                    if (list[i].size < target && meetsConditions(list[i], ignore, maxSize))
+                    if (list[i].size < target && meetsConditions(list[i], maxSize))
                     {
                         if (target - list[i].size == favorite - target)
                         {
@@ -1104,7 +1060,7 @@ namespace DiscDoingsWPF
             {
                 string checksum = "";
                 for (int x = 0; x < allFiles[i].checksum.Length; x++) checksum += allFiles[i].checksum[x];
-                result += allFiles[i].fileName + " " + "\n";
+                result += allFiles[i].fileName + " " + checksum + "\n";
             }
             return result;
         }
