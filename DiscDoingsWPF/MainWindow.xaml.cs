@@ -111,6 +111,74 @@ namespace DiscDoingsWPF
             
         }
 
+        //Called when an item in AllFilesListBox is clicked
+        private void ChooseFileList(object sender, SelectionChangedEventArgs args)
+        {
+            updateMainScreenFileDetails();
+        }
+
+        //Updates the file details attributes on the main screen based on whatever file is selected in the file picker.
+        private void updateMainScreenFileDetails()
+        {
+            const string detailsName = "No files selected", detailsPath = "Location: ", detailsSize = "Size: ";
+            const string debugName = "updateMainScreenFileDetails():";
+            const bool debug = false;
+            long fileSizeTally = 0;
+            string fileLocation;
+
+            if (AllFilesListBox.SelectedItems.Count == 0)
+            {
+                AllFiles_DetailsName.Content = detailsName;
+                AllFiles_DetailsPath.Content = detailsPath;
+                AllFiles_DetailsSize.Content = detailsSize;
+                return;
+            }
+
+            if (AllFilesListBox.SelectedItems.Count > 1)
+            {
+                AllFiles_DetailsName.Content = "Multiple files selected";
+            } 
+            else
+            {
+                AllFiles_DetailsName.Content = burnpool.allFiles[burnpool.findFileByFullPath(AllFilesListBox.SelectedItem.ToString())].fileName;
+            }
+
+            //Note: The AllFilesListBox should always display items in the same order as they are in the burnpool.allFiles array
+            for (int i = 0; i < AllFilesListBox.SelectedItems.Count; i++)
+            {
+                try
+                {
+                    fileSizeTally += burnpool.allFiles[burnpool.findFileByFullPath(AllFilesListBox.SelectedItems[i].ToString())].size;
+                    if (i == 0)
+                    {
+                        AllFiles_DetailsPath.Content = getDirectoryFromPath(AllFilesListBox.SelectedItems[i].ToString());
+                    }
+                    else
+                    {
+                        if (getDirectoryFromPath(AllFilesListBox.SelectedItems[i].ToString()) != AllFiles_DetailsPath.Content.ToString())
+                        {
+                            if (debug)
+                            {
+                                debugEcho(debugName + "The string [" + getDirectoryFromPath(AllFilesListBox.SelectedItems[i].ToString()) +
+                                    "] != [" + AllFiles_DetailsPath.Content + "]");
+                            }
+                            AllFiles_DetailsPath.Content = "Files from multiple directories selected";
+                        }
+                    }
+                }
+                catch (NullReferenceException)
+                {
+                    string debugOut = debugName + "Null reference exception when looking for " + AllFilesListBox.SelectedItems[i].ToString() +
+                        " in burnpool.";
+                    debugEcho(debugOut);
+                    System.Windows.MessageBox.Show(debugOut);
+                    return;
+                }
+            }
+
+            AllFiles_DetailsSize.Content = detailsSize + fileSizeTally.ToString() + " bytes";
+        }
+
         //Initializes the currently loaded burnpool and window contents
         private void startBurnPool()
         {
@@ -216,6 +284,36 @@ namespace DiscDoingsWPF
 
         }
 
+        private void RemoveBurnButtonClick(object sender, RoutedEventArgs e)
+        {
+            const string debugName = "MainWindow::RemoveBurnButtonClick:";
+            if (BurnViewListBox.SelectedItems.Count == 0)
+            {
+                string debugtext = "Please select a burn to remove.";
+                System.Windows.MessageBox.Show(debugtext);
+                return;
+            }
+
+            MessageBoxResult result = System.Windows.MessageBox.Show("Are you sure you want to remove the burn list \"" +
+                BurnViewListBox.SelectedItem.ToString() + "\"?",
+                    applicationName, MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.No)
+            {
+                return;
+            }
+
+            try
+            {
+                burnpool.deleteOneBurn((int)burnpool.getBurnQueueFileByName(BurnViewListBox.SelectedItem.ToString()));
+            }
+            catch (NullReferenceException)
+            {
+                debugEcho(debugName + "Null reference exception: Null returned when attempting to find OneBurn titled \"" +
+                    BurnViewListBox.SelectedItem.ToString() + "\"");
+            }
+
+            updateAllWindows();
+        }
 
         private void VolumeSizeTextInput_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -237,10 +335,11 @@ namespace DiscDoingsWPF
             picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
             picker.FileTypeFilter.Add("*");
 
+            
 
-            if (getBurnQueueTasks() > 0)
+            if (getPendingTasks() > 0)
             {
-                System.Windows.MessageBox.Show("Burn queue operation in progress. Please wait for burn queue " +
+                System.Windows.MessageBox.Show("Some operations are still in progress. Please wait for operations " +
                     "to finish before adding more files.");
                 return;
             }
@@ -312,10 +411,54 @@ namespace DiscDoingsWPF
 
         }
 
+        //Handler for the button that removes files
+        private void AllFiles_RemoveFileButtonClick(object sender, RoutedEventArgs e)
+        {
+            if (AllFilesListBox.SelectedItems.Count == 0)
+            {
+                System.Windows.MessageBox.Show("Please select at least one file to remove.");
+                return;
+            }
+            for (int i = 0; i < AllFilesListBox.SelectedItems.Count; i++)
+            {
+                burnpool.removeFile(AllFilesListBox.SelectedItems[i].ToString());
+            }
+            updateAllWindows();
+        }
+
         //Update the main file view
         private void updateMainScreenFileView()
         {
-            MainWindow_FileView.Text = burnpool.burnPoolToString();
+            //MainWindow_FileView.Text = burnpool.burnPoolToString();
+            const bool debug = true;
+            const string debugName = "updateMainScreenFileView():";
+            AllFilesListBox.Items.Clear();
+            for (int i = 0; i < burnpool.allFiles.Count; i++)
+            {
+                //AllFilesListBox.Items.Add(burnpool.allFiles[i].fileName);
+                AllFilesListBox.Items.Add(burnpool.allFiles[i].originalPath);
+            }
+
+
+            //Check whether there is a file with an identical filename and append an asterisk
+            //Important as identical filenames could cause issues with getting file attributes by clicking on the list
+            /*
+            if (debug) debugEcho(debugName + "Starting identical filename check");
+            for (int i = 0; i < AllFilesListBox.Items.Count; i++)
+            {
+                for (int x = i + 1; x < AllFilesListBox.Items.Count; x++)
+                {
+                    if (AllFilesListBox.Items[i].ToString() == AllFilesListBox.Items[x].ToString() )
+                    {
+                        //System.Windows.MessageBox.Show(AllFilesListBox.Items[i].ToString() + " is identical to " +
+                            //AllFilesListBox.Items[x].ToString());
+                        AllFilesListBox.Items[x] += "*";
+                    }
+                }
+            }
+            if (debug) debugEcho(debugName + "Completed identical filename check");
+            */
+
         }
 
         //Populate the burn window with whatever is in burnpool.burnQueue. Always blanks the burn window first.
@@ -389,7 +532,25 @@ namespace DiscDoingsWPF
             }
         }
 
-
+        //Pass a full path to a file and get back just the directory it's in
+        private string getDirectoryFromPath(string path)
+        {
+            int lastSlash = -1;
+            for (int i = path.Length - 1; i > 0; i--)
+            {
+                if (path[i] == '\\')
+                {
+                    lastSlash = i;
+                    break;
+                }
+            }
+            if (lastSlash == -1)
+            {
+                debugEcho("getDirectoryFromPath: Path " + path + " appears to be invalid.");
+                return "";
+            }
+            return (path.Substring(0, lastSlash + 1));
+        }
 
         //Detect whether changes have been made since the file was last saved, or since a new file was created
         private bool changesMade()
@@ -505,9 +666,11 @@ namespace DiscDoingsWPF
             startBurnPool();
         }
 
+        
+
         private void MixedUseButton(object sender, RoutedEventArgs e)
         {
-            //test();
+            //System.Windows.MessageBox.Show(getDirectoryFromPath("C:\\BALLS\\dick\\ hellloi peesnis \\BALLER.jpg"));
         }
 
         private async void FileOpen_Click(object sender, RoutedEventArgs e)
@@ -614,5 +777,7 @@ namespace DiscDoingsWPF
 
 
         }
+
+
     }
 }

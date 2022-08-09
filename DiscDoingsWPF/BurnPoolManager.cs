@@ -151,6 +151,24 @@ namespace DiscDoingsWPF
                 return true;
             }
 
+            //Pass the full path of a file. If that file exists in this OneBurn, it returns the index. If not, it returns -1
+            public int findFileByFullPath(string path)
+            {
+                const bool msgBox = false;
+                const string debugName = "BurnPoolManager::OneBurn::findFileByFullPath():";
+                for (int i = 0; i < files.Count; i++)
+                {
+                    if (msgBox)
+                    {
+                        System.Windows.MessageBox.Show(debugName + "Comparing " + files[i].originalPath + " with " + path);
+                    }
+                    if (files[i].originalPath == path) return i;
+                    if (msgBox) System.Windows.MessageBox.Show(debugName + "Did not match");
+                }
+                if (msgBox) System.Windows.MessageBox.Show(debugName + "No matches found");
+                return -1;
+            }
+
             public void print()
             {
                 Console.WriteLine("Printing contents of " + name);
@@ -331,6 +349,119 @@ namespace DiscDoingsWPF
         }
 
 
+        //Don't make this async, it will probably cause problems
+        public void removeFile(string fullPath)
+        {
+            const string debugName = "BurnPoolManager::removeFile():";
+            //Need to remove it from the main list and check the burn queue for that file
+            FileProps fileToRemove = allFiles[findFileByFullPath(fullPath)];
+
+            if (!allFiles.Remove(fileToRemove))
+            {
+                echoDebug(debugName + "File " + fullPath + " was not found in this BurnPoolManager.");
+                return;
+            }
+            
+            allFilesNotInBurnQueue.Remove(fileToRemove).ToString();
+
+            for (int i = 0; i < burnQueue.Count; i++)
+            {
+                for (int x = 0; x < burnQueue[i].files.Count; x++)
+                {
+                    if (FilePropsEqual(burnQueue[i].files[x], fileToRemove))
+                    {
+                        burnQueue[i].files.RemoveAt(x);
+                        x -= 1; 
+                    }
+                }
+            }
+        }
+
+        //Use this any time a file is removed from a OneBurn. This is necessary in order to update allFilesNotInBurnQueue
+        //This will place the file back in allFilesNotInBurnQueue at the end. Which probably won't cause any issues. Most likely.
+        public bool removeFileFromOneBurn(int oneBurnIndex, int fileIndex)
+        {
+            const string debugName = "BurnPoolManager::removeFileFromOneBurn():";
+            const bool debug = false;
+
+            if (debug)
+            {
+                echoDebug(debugName + "Starting with burnQueue: " + oneBurnIndex + " fileIndex: " + fileIndex);
+                //System.Windows.MessageBox.Show(debugName + "Starting with burnQueue: " + oneBurnIndex + " fileIndex: " + fileIndex);
+            }
+
+            FileProps fileToRemove = burnQueue[oneBurnIndex].files[fileIndex];
+
+            if (oneBurnIndex > burnQueue.Count || oneBurnIndex < 0)
+            {
+                echoDebug(debugName + "OneBurn index is out of range.");
+                return false;
+            }
+            if (burnQueue[oneBurnIndex].files.Count < fileIndex || fileIndex < 0)
+            {
+                echoDebug(debugName + "File index is out of range.");
+                return false;
+            }
+
+            try
+            {
+                if (!burnQueue[oneBurnIndex].removeFile(fileIndex))
+                {
+                    echoDebug(debugName + "Attempt to remove file[" + fileIndex + "] in OneBurn[" + oneBurnIndex + "] " +
+                        "was unsuccessful.");
+                    return false;
+                }
+                allFilesNotInBurnQueue.Add(fileToRemove);
+                return true;
+
+            }
+            catch (NullReferenceException)
+            {
+                echoDebug(debugName + "Attempt to remove file[" + fileIndex + "] in OneBurn[" + oneBurnIndex + "] " +
+                        "resulted in a null reference and was unsuccessful.");
+                return false;
+            }
+
+            echoDebug(debugName + "Exited without successfully removing file or throwing a known error.");
+            return false;
+        }
+
+        //Deletes a OneBurn from the list, restoring all files which are not in other OneBurns to the allFilesNotInBurnQueue
+        //Make sure to check that said files aren't in other OneBurns, since that's possible to do
+        public bool deleteOneBurn(int oneBurnIndex)
+        {
+            const string debugName = "BurnPoolManager::deleteOneBurn:";
+            const bool debug = false;
+
+
+            if (oneBurnIndex > burnQueue.Count || oneBurnIndex < 0)
+            {
+                echoDebug(debugName + "Invalid OneBurn index.");
+                return false;
+            }
+
+            FileProps temphold = new FileProps();
+            for (int i = 0; i < burnQueue[oneBurnIndex].files.Count; i++)
+            {
+                temphold = burnQueue[oneBurnIndex].files[i];
+                if (!burnQueue[oneBurnIndex].removeFile(i))
+                {
+                    echoDebug(debugName + "Removal of file index " + i + " of burnQueue index " + oneBurnIndex + " failed." +
+                        " Halting removal of OneBurn.");
+                    return false;
+                }
+                if (!existsInBurnQueue(temphold))
+                {
+                    allFilesNotInBurnQueue.Add(temphold);
+                }
+            }
+
+            sortFilesBySize();
+
+            burnQueue.RemoveAt(oneBurnIndex);
+            return true;
+        }
+
         public byte[] createHash(FileInfo fInfo)
         {
             const string debugName = "createHash:";
@@ -480,7 +611,7 @@ namespace DiscDoingsWPF
         //nevermind not this one
         public OneBurn generateBurnQueueButGood(long sizeInBytes)
         {
-            const bool verbose = true;
+            const bool verbose = false;
             const string debugName = "generateBurnQueueButGood:";
             OneBurn aBurn = new OneBurn(sizeInBytes);
             aBurn.setName(thisPool + (burnQueue.Count + completedBurns.Count));
@@ -538,7 +669,7 @@ namespace DiscDoingsWPF
         //Generate a OneBurn and add it to the queue. Returns false if a OneBurn can't be generated.
         public bool generateOneBurn(long sizeInBytes)
         {
-            const bool verbose = true;
+            const bool verbose = false;
             const string debugName = "generateOneBurn:";
             OneBurn aBurn = new OneBurn(sizeInBytes);
             aBurn.setName(thisPool + (burnQueue.Count + completedBurns.Count));
@@ -549,11 +680,25 @@ namespace DiscDoingsWPF
 
             if (verbose) echoDebug(debugName + "Files sorted by size");
 
+            /*
+             * Old version of this that needs to be updated to work properly with allFilesNotInBurnQueue
             for (int i = 0; i < allFiles.Count; i++) //Start with the biggest file that will fit
             {
                 if (aBurn.canAddFile(allFiles[i]) && !existsInBurnQueue(allFiles[i]))
                 {
                     aBurn.addFile(allFiles[i]);
+
+                    break;
+                }
+            }
+            */
+
+            for (int i = 0; i < allFilesNotInBurnQueue.Count; i++) //Start with the biggest file that will fit
+            {
+                if (aBurn.canAddFile(allFilesNotInBurnQueue[i]))
+                {
+                    aBurn.addFile(allFilesNotInBurnQueue[i]);
+                    allFilesNotInBurnQueue.RemoveAt(i);
                     break;
                 }
             }
@@ -609,11 +754,33 @@ namespace DiscDoingsWPF
         //If there is no result, it returns null.
         public int? getBurnQueueFileByName(string oneBurnName)
         {
+            const bool debug = false;
+            const string debugName = "BurnPoolManager::getBurnQueueFileByName:";
+            if (debug)
+            {
+                echoDebug(debugName + "Starting with oneBurnName: " + oneBurnName);
+                echoDebug("Looking in these OneBurns:");
+                for (int i = 0; i < burnQueue.Count; i++)
+                {
+                    echoDebug(burnQueue[i].name);
+                }
+            }
             for (int i = 0; i < burnQueue.Count; i++)
             {
-                if (burnQueue[i].name == oneBurnName) return i;
+                if (burnQueue[i].name == oneBurnName)
+                {
+                    if (debug)
+                    {
+                        echoDebug(debugName + "OneBurn \"" + burnQueue[i].name + "\" equals \"" + oneBurnName + "\" Returning " + i);
+                    }
+                    return i;
+                }
             }
 
+            if (debug)
+            {
+                echoDebug(debugName + "No equal results were found, returning null.");
+            }
             return null;
         }
 
@@ -624,6 +791,8 @@ namespace DiscDoingsWPF
             const string debugName = "sortFilesBySize:";
             FileProps temphold;
             int iterations = 0, restarts = 0;
+
+            sortAllFilesNotInBurnQueueBySize();
 
             if (debug) echoDebug(debugName + "Start");
 
@@ -655,6 +824,58 @@ namespace DiscDoingsWPF
                         temphold = allFiles[i - 1];
                         allFiles[i - 1] = allFiles[i];
                         allFiles[i] = temphold;
+                        i--;
+                    }
+
+                    i = -1; //Start the main loop over from the top
+
+
+                    if (debug)
+                    {
+                        restarts++;
+                    }
+                }
+            }
+        }
+
+        //Same as above, but works with a list passed as an argument. Modifies the list directly
+        public void sortAllFilesNotInBurnQueueBySize()
+        {
+            const bool debug = false;
+            const string debugName = "BurnPoolManager::sortFilesBySize(ref List<FileProps> listToSort):";
+            FileProps temphold;
+            int iterations = 0, restarts = 0;
+
+            if (debug) echoDebug(debugName + "Start");
+
+            if (allFilesNotInBurnQueue.Count < 2) return;
+
+            for (int i = 0; i < allFilesNotInBurnQueue.Count - 1; i++)
+            {
+                if (debug)
+                {
+                    iterations++;
+                    //if (iterations % 5000 == 0) echoDebug(iterations.ToString() + " " + restarts.ToString());
+                }
+                //Console.WriteLine(i + " About to compare " + allFiles[i].fileName + " " + allFiles[i].size + " to " +
+                //allFiles[i + 1].fileName + " " + allFiles[i + 1].size);
+                if (allFilesNotInBurnQueue[i + 1].size > allFilesNotInBurnQueue[i].size)
+                {
+                    if (debug)
+                    {
+                        if (restarts % 5000 == 0) echoDebug(restarts + ": " + allFiles[i + 1].size
+                            + " is larger than " + allFiles[i].size);
+                    }
+                    temphold = allFilesNotInBurnQueue[i];
+                    allFilesNotInBurnQueue[i] = allFilesNotInBurnQueue[i + 1];
+                    allFilesNotInBurnQueue[i + 1] = temphold;
+
+                    //Keep moving it up the list as long as it's bigger than the one before it
+                    while (i > 0 && allFilesNotInBurnQueue[i].size > allFilesNotInBurnQueue[i - 1].size)
+                    {
+                        temphold = allFilesNotInBurnQueue[i - 1];
+                        allFilesNotInBurnQueue[i - 1] = allFilesNotInBurnQueue[i];
+                        allFilesNotInBurnQueue[i] = temphold;
                         i--;
                     }
 
@@ -741,6 +962,17 @@ namespace DiscDoingsWPF
                 {
                     return i;
                 }
+            }
+            return -1;
+        }
+
+        //Pass a full path to a file and if that file exists in this burnpool, it will return its position.
+        //Returns -1 if no match was found
+        public int findFileByFullPath(string path)
+        {
+            for (int i = 0; i < allFiles.Count; i++)
+            {
+                if (allFiles[i].originalPath == path) return i;
             }
             return -1;
         }
@@ -857,7 +1089,7 @@ namespace DiscDoingsWPF
         //for the nearest file
         public int? findFileByNearestSizeA(List<FileProps> list, long target, long maxSize)
         {
-            bool verbose = true;
+            bool verbose = false;
             string debugName = "findFileByNearestSizeA:";
             int? favorite = null;
             Func<FileProps, long, bool> meetsConditions = (aFile, sizeLimit) => (aFile.size <= maxSize);

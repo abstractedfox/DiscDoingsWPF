@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DiscDoingsWPF"
         mc:Ignorable="d"
-        Title="OneBurnViewDetails" Height="600" Width="400">
+        Title="OneBurnViewDetails" Height="700" Width="400">
     <Grid>
         <StackPanel Orientation="Vertical" Margin="8,8,8,8">
         <StackPanel Orientation="Horizontal">
@@ -17,22 +17,27 @@
                 <Label Content="Space used/unused:"
                        FontSize="12"/>
                 </StackPanel>
-            <StackPanel Orientation="Vertical">
-                <Label x:Name="OneBurnViewDetails_BurnName"
+                <StackPanel Orientation="Vertical">
+                    <Label x:Name="OneBurnViewDetails_BurnName"
                     Content="Initialized Label"
                        FontSize="12"/>
-                <Label x:Name="OneBurnViewDetails_VolumeSize"
+                    <Label x:Name="OneBurnViewDetails_VolumeSize"
                     Content="Initialized Label"
                        FontSize="12"/>
-                <Label x:Name="OneBurnViewDetails_SpaceUsedUnused"
+                    <Label x:Name="OneBurnViewDetails_SpaceUsedUnused"
                     Content="Initialized Label"
                        FontSize="12"/>
+                    
                 </StackPanel>
             </StackPanel>
             <ListBox 
                 x:Name="OneBurnListBox"
-                SelectionMode="Single"
+                SelectionMode="Extended"
                 Height="469" />
+            <Button 
+                Content="Remove file from this burn"
+                Click="RemoveFileFromOneBurnButtonClick"
+                    />
         </StackPanel>
     </Grid>
 </Window>
