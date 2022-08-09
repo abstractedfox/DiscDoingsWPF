@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DiscDoingsWPF"
         mc:Ignorable="d"
-        Title="MainWindow" Height="600" Width="800"
+        Title="MainWindow" Height="896" Width="800"
         x:Name="TheMainWindow">
     
     
@@ -37,16 +37,35 @@
                        Margin ="0,15,0,0"
                        Width="689"/>
 
-                        <TextBox x:Name="MainWindow_FileView"
-                     HorizontalAlignment="Center" 
-                     Margin="0,0,0,0" 
-                     TextWrapping="Wrap" 
-                     Text="TextBox" 
-                     VerticalAlignment="Top"
-                     Width="689" 
-                     Height="347"
-                                 VerticalScrollBarVisibility="Auto"/>
+                        <StackPanel Orientation="Horizontal"
+                                    Width="700">
+                            <ListBox 
+                                Margin="0,0,0,0"
+                            x:Name="AllFilesListBox"
+                            Width="400"
+                            Height="400"
+                            SelectionChanged="ChooseFileList"
+                            SelectionMode="Extended"
+                            />
+                            <StackPanel Orientation="Vertical"
+                                        Width="290"
+                                        Margin="10,0,0,0">
+                                <Label Content="No file selected"
+                                       x:Name="AllFiles_DetailsName"/>
 
+                                <Label Content="Located:"
+                                       x:Name="AllFiles_DetailsPath"
+                                       Margin="8,0,0,0"/>
+                                <Label Content="Size:"
+                                       x:Name="AllFiles_DetailsSize"
+                                       Margin="8,0,0,0"/>
+                                <Button Content="Remove File"
+                                Click="AllFiles_RemoveFileButtonClick"/>
+                            </StackPanel>
+                        </StackPanel>
+                        
+                        
+                        
                         <Button Content="File picker"
                                 Click="OpenFilePicker"
                                 HorizontalAlignment="Center"/>
@@ -67,11 +86,11 @@
 
                 </TabItem>
                 <TabItem Header="Burn view">
-                    <StackPanel Width="200">
+                    <StackPanel Width="500">
                         <Label Content="Burn List"/>
                         <ListBox 
                     x:Name="BurnViewListBox"
-                    Width="200"
+                    Width="500"
                     Height="300"
                     SelectionChanged="ChooseBurnList"
                     SelectionMode="Single"
@@ -87,6 +106,12 @@
                         <Button
                         Margin="0,15,0,0"
                         Click="CalculateBurnListButtonClick">Calculate burn lists from files</Button>
+
+                        <Button
+                        Margin="0,15,0,0"
+                        Click="RemoveBurnButtonClick">
+                            Remove this burn
+                        </Button>
 
                     </StackPanel>
 
