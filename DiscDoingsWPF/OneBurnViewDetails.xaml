@@ -16,6 +16,8 @@
                        FontSize="12"/>
                 <Label Content="Space used/unused:"
                        FontSize="12"/>
+                <Label Content="Times Burned:"
+                    FontSize="12"/>
                 </StackPanel>
                 <StackPanel Orientation="Vertical">
                     <Label x:Name="OneBurnViewDetails_BurnName"
@@ -25,6 +27,9 @@
                     Content="Initialized Label"
                        FontSize="12"/>
                     <Label x:Name="OneBurnViewDetails_SpaceUsedUnused"
+                    Content="Initialized Label"
+                       FontSize="12"/>
+                    <Label x:Name="OneBurnViewDetails_TimesBurned"
                     Content="Initialized Label"
                        FontSize="12"/>
                     

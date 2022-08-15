@@ -28,17 +28,14 @@
             <TabControl>
                 <TabItem Header="All Files">
                     <StackPanel>
-                        <Label Content="Hello!"
-                       Margin ="0,0,0,0"
-                       Width="689"
-                               x:Name="StatusField"/>
-                        
+
                         <Label Content="All files"
                        Margin ="0,15,0,0"
                        Width="689"/>
 
                         <StackPanel Orientation="Horizontal"
-                                    Width="700">
+                                    Width="700"
+                                    Margin="0,0,0,5">
                             <ListBox 
                                 Margin="0,0,0,0"
                             x:Name="AllFilesListBox"
@@ -46,6 +43,7 @@
                             Height="400"
                             SelectionChanged="ChooseFileList"
                             SelectionMode="Extended"
+                            MouseDoubleClick="FileViewListBox_MouseDoubleClick"
                             />
                             <StackPanel Orientation="Vertical"
                                         Width="290"
@@ -66,7 +64,7 @@
                         
                         
                         
-                        <Button Content="File picker"
+                        <Button Content="Add Files"
                                 Click="OpenFilePicker"
                                 HorizontalAlignment="Center"/>
 
@@ -109,12 +107,38 @@
 
                         <Button
                         Margin="0,15,0,0"
+                        Click="MarkBurnedButtonClick">
+                            Mark this as burned
+                        </Button>
+                        
+                        <Button
+                        Margin="0,15,0,0"
                         Click="RemoveBurnButtonClick">
                             Remove this burn
                         </Button>
 
                     </StackPanel>
 
+                </TabItem>
+
+                <TabItem Header="Discs Burned">
+                    <StackPanel Width="500">
+                        <Label Content="Discs Burned"
+                           />
+                        <ListBox 
+                            Margin="0,0,0,0"
+                        x:Name="BurnedDiscsListBox"
+                        Width="400"
+                        Height="400"
+                        SelectionMode="Single"
+                    MouseDoubleClick="BurnedDiscsListBox_MouseDoubleClick"
+                        />
+                        <Button
+                        Margin="0,15,0,0"
+                        Click="MarkUnburnedButtonClick">
+                            Unmark this as burned
+                        </Button>
+                    </StackPanel>
                 </TabItem>
             </TabControl>
 

@@ -20,13 +20,14 @@ namespace DiscDoingsWPF
         private string? lastError;
         public string thisPool { get; set; } //The name of this pool
         public List<OneBurn> burnQueue { get; set; } //Burns which are ready
-        public List<OneBurn> completedBurns { get; set; } //Burns which have been completed
+        //public List<OneBurn> completedBurns { get; set; } //Burns which have been completed
         public hashTypes hashTypeUsed { get; set; }
         public MainWindow? mainWindow; //This will be used to get access to the debug string in MainWindow
 
-        public const int formatVersion = 1;
+        public const int formatVersion = 2;
         //formatVersion 1 adds the hashTypes enum, the hashType field to FileProps,
         //the HashTypeUsed field to BurnPoolManager, the createHashMD5 function, and this field indicating the format version.
+        //Version 2: Added "timesBurned" field to OneBurn and remoived the "List<OneBurn> completedBurns" field
 
 
         public enum hashTypes
@@ -60,6 +61,7 @@ namespace DiscDoingsWPF
             public long spaceUsed { get; set; }
             public List<FileProps> files { get; set; } //Files to be burned. Do not alter this directly!
             public string name { get; set; }
+            public int timesBurned; //The number of times this OneBurn has been burned to a physical disc
             
             
 
@@ -69,6 +71,7 @@ namespace DiscDoingsWPF
                 spaceRemaining = fileSizeBytes;
                 sizeOfVolume = fileSizeBytes;
                 name = "Untitled OneBurn";
+                timesBurned = 0;
             }
 
             public OneBurn() //Including a parameter-less constructor is necessary to use JsonSerializer
@@ -77,6 +80,7 @@ namespace DiscDoingsWPF
                 spaceRemaining = 0;
                 sizeOfVolume = 0;
                 name = "Untitled OneBurn";
+                timesBurned = 0;
             }
 
             //Calculates the value for spaceUsed and spaceRemaining
@@ -94,6 +98,7 @@ namespace DiscDoingsWPF
 
 
             //Returns false if the file is too big for the current instance
+
             public bool addFile(FileProps file)
             {
                 if (canAddFile(file)) {
@@ -185,7 +190,7 @@ namespace DiscDoingsWPF
             allFiles = new List<FileProps>();
             allFilesNotInBurnQueue = new List<FileProps>();
             burnQueue = new List<OneBurn>();
-            completedBurns = new List<OneBurn>();
+            //completedBurns = new List<OneBurn>();
             thisPool = "Untitled Pool";
             lastError = "";
             hashTypeUsed = hashTypes.SHA256;
@@ -197,7 +202,7 @@ namespace DiscDoingsWPF
             allFiles = new List<FileProps>();
             allFilesNotInBurnQueue = new List<FileProps>();
             burnQueue = new List<OneBurn>();
-            completedBurns = new List<OneBurn>();
+            //completedBurns = new List<OneBurn>();
             thisPool = "Untitled Pool";
             lastError = "";
             hashTypeUsed = hashTypes.SHA256;
@@ -244,6 +249,7 @@ namespace DiscDoingsWPF
             }
 
             //this.completedBurns = copySource.completedBurns;
+            /*
             if (copySource.completedBurns == null) this.completedBurns = new List<OneBurn>();
             else
             {
@@ -253,6 +259,7 @@ namespace DiscDoingsWPF
                     this.completedBurns.Add(copySource.completedBurns[i]);
                 }
             }
+            */
 
             if (copySource.hashTypeUsed == null)
             {
@@ -332,6 +339,7 @@ namespace DiscDoingsWPF
                 newFile.timeAdded = DateTime.Now.ToString();
                 newFile.lastModified = fInfo.LastWriteTime.ToString();
                 newFile.isExtra = false;
+                newFile.discsBurned = new List<String>();
 
                 string hashString = "";
                 byte[] hashtime = createHash(fInfo);
@@ -350,20 +358,29 @@ namespace DiscDoingsWPF
 
 
         //Don't make this async, it will probably cause problems
-        public void removeFile(string fullPath)
+        //Returns false if there is an issue
+        public bool removeFile(string fullPath)
         {
             const string debugName = "BurnPoolManager::removeFile():";
             //Need to remove it from the main list and check the burn queue for that file
             FileProps fileToRemove = allFiles[findFileByFullPath(fullPath)];
 
+            if (fileToRemove.discsBurned.Count > 0)
+            {
+                echoDebug(debugName + "File \"" + fileToRemove.originalPath + "\" has been marked as burned. To remove it, first " +
+                    "delete all discs that it has been burned to.");
+                return false;
+            }
+
             if (!allFiles.Remove(fileToRemove))
             {
                 echoDebug(debugName + "File " + fullPath + " was not found in this BurnPoolManager.");
-                return;
+                return false;
             }
             
             allFilesNotInBurnQueue.Remove(fileToRemove).ToString();
 
+            //Remove it from all OneBurns with that file
             for (int i = 0; i < burnQueue.Count; i++)
             {
                 for (int x = 0; x < burnQueue[i].files.Count; x++)
@@ -375,10 +392,11 @@ namespace DiscDoingsWPF
                     }
                 }
             }
+            return true;
         }
 
         //Use this any time a file is removed from a OneBurn. This is necessary in order to update allFilesNotInBurnQueue
-        //This will place the file back in allFilesNotInBurnQueue at the end. Which probably won't cause any issues. Most likely.
+        //This will place the file back in allFilesNotInBurnQueue at the end, so run sortFilesBySize() after calling it
         public bool removeFileFromOneBurn(int oneBurnIndex, int fileIndex)
         {
             const string debugName = "BurnPoolManager::removeFileFromOneBurn():";
@@ -403,6 +421,19 @@ namespace DiscDoingsWPF
                 return false;
             }
 
+            if (burnQueue[oneBurnIndex].timesBurned > 0)
+            {
+                try
+                {
+                    mainWindow.informUser(MainWindow.userMessages.DISC_ALREADY_BURNED);
+                    return false;
+                }
+                catch(NullReferenceException)
+                {
+                    echoDebug(debugName + "MainWindow reference is null.");
+                }
+            }
+
             try
             {
                 if (!burnQueue[oneBurnIndex].removeFile(fileIndex))
@@ -412,6 +443,7 @@ namespace DiscDoingsWPF
                     return false;
                 }
                 allFilesNotInBurnQueue.Add(fileToRemove);
+                allFiles[findFileByFullPath(fileToRemove.originalPath)].discsBurned.Remove(burnQueue[oneBurnIndex].name);
                 return true;
 
             }
@@ -427,7 +459,9 @@ namespace DiscDoingsWPF
         }
 
         //Deletes a OneBurn from the list, restoring all files which are not in other OneBurns to the allFilesNotInBurnQueue
-        //Make sure to check that said files aren't in other OneBurns, since that's possible to do
+        //Make sure to check that said files aren't in other OneBurns, since that's possible to do.
+        //This function will -not- check the timesBurned field to see if the OneBurn has been burned to a disc.
+        //The calling function should make any compensations for that on its own!
         public bool deleteOneBurn(int oneBurnIndex)
         {
             const string debugName = "BurnPoolManager::deleteOneBurn:";
@@ -439,6 +473,7 @@ namespace DiscDoingsWPF
                 echoDebug(debugName + "Invalid OneBurn index.");
                 return false;
             }
+
 
             FileProps temphold = new FileProps();
             for (int i = 0; i < burnQueue[oneBurnIndex].files.Count; i++)
@@ -453,6 +488,15 @@ namespace DiscDoingsWPF
                 if (!existsInBurnQueue(temphold))
                 {
                     allFilesNotInBurnQueue.Add(temphold);
+                }
+
+                int indexInMainList = findFileByFullPath(temphold.originalPath);
+                for (int x = 0; x < allFiles[indexInMainList].discsBurned.Count; x++)
+                {
+                    if (allFiles[indexInMainList].discsBurned[x] == burnQueue[oneBurnIndex].name)
+                    {
+                        allFiles[indexInMainList].discsBurned.RemoveAt(x);
+                    }
                 }
             }
 
@@ -609,62 +653,6 @@ namespace DiscDoingsWPF
 
         //this one!
         //nevermind not this one
-        public OneBurn generateBurnQueueButGood(long sizeInBytes)
-        {
-            const bool verbose = false;
-            const string debugName = "generateBurnQueueButGood:";
-            OneBurn aBurn = new OneBurn(sizeInBytes);
-            aBurn.setName(thisPool + (burnQueue.Count + completedBurns.Count));
-
-            if (verbose) echoDebug(debugName + "Start");
-
-            sortFilesBySize();
-
-            if (verbose) echoDebug(debugName + "Files sorted by size");
-
-            for (int i = 0; i < allFiles.Count; i++) //Start with the biggest file that will fit
-            {
-                if (aBurn.canAddFile(allFiles[i]) && !existsInBurnQueue(allFiles[i]))
-                {
-                    aBurn.addFile(allFiles[i]);
-                    break;
-                }
-            }
-
-            long spaceTarget = aBurn.spaceRemaining / 2;
-            int passes = 0; //for debug purposes
-            if (verbose) echoDebug(debugName + "First file added, loopy next");
-            do
-            {
-                int? nextFile = findFileByNearestSize(allFiles, spaceTarget, aBurn.files, aBurn.spaceRemaining);
-
-                if (verbose)
-                {
-                    echoDebug(debugName + " pass " + passes + " nextFile:" + nextFile + " spaceTarget = " + spaceTarget);
-                }
-
-                if (nextFile == null) break; //No suitable files were found
-                int nextFileInt = nextFile ?? default(int); //necessary to resolve the nullable int
-
-                if (verbose)
-                {
-                    echoDebug(debugName + "Adding: " + allFiles[nextFileInt]);
-                    passes++;
-                    mainWindow.debugEchoAsync(passes.ToString());
-                    if (passes > 5000) MessageBox.Show("Hey");
-                }
-
-                aBurn.addFile(allFiles[nextFileInt]);
-                //Note: findFileByNearestSize examines every file in the given List<FileProps> on each pass, and ignores any results that would
-                //not fit the limit or that are already in the burn list. For that reason, no additional checks should be needed here as it
-                //will return null if it can't find anything that fits these criteria
-
-                spaceTarget = aBurn.spaceRemaining / 2;
-            }
-            while (true);
-
-            return aBurn;
-        }
 
         //Generate a OneBurn and add it to the queue. Returns false if a OneBurn can't be generated.
         public bool generateOneBurn(long sizeInBytes)
@@ -672,7 +660,7 @@ namespace DiscDoingsWPF
             const bool verbose = false;
             const string debugName = "generateOneBurn:";
             OneBurn aBurn = new OneBurn(sizeInBytes);
-            aBurn.setName(thisPool + (burnQueue.Count + completedBurns.Count));
+            aBurn.setName(thisPool + (burnQueue.Count));
 
             if (verbose) echoDebug(debugName + "Start");
 
@@ -888,6 +876,85 @@ namespace DiscDoingsWPF
                     }
                 }
             }
+        }
+
+        //Once a OneBurn has been burned, this commits it to the burned discs list
+        public bool commitOneBurn(int burnQueueMember)
+        {
+            const string debugName = "BurnPoolManager::commitOneBurn:";
+            const bool debug = false;
+
+            if (burnQueueMember > burnQueue.Count || burnQueueMember < 0){
+                echoDebug(debugName + "Index of " + burnQueueMember + " is out of range.");
+                return false;
+            }
+            if (burnQueue[burnQueueMember] == null)
+            {
+                echoDebug(debugName + "burnQueue index " + burnQueueMember + " is null.");
+                return false;
+            }
+
+            for (int i = 0; i < burnQueue[burnQueueMember].files.Count; i++)
+            {
+                allFiles[findFileByFullPath(burnQueue[burnQueueMember].files[i].originalPath)].discsBurned.Add(burnQueue[burnQueueMember].name);
+            }
+
+            burnQueue[burnQueueMember].timesBurned++;
+            return true;
+        }
+
+        //If this member in the burnQueue has been marked as burned, unmark it and remove that OneBurn from the 
+        //discsBurned field of all FileProps in allFiles
+        public bool uncommitOneBurn(int burnQueueMember)
+        {
+            const string debugName = "BurnPoolManager::uncommitOneBurn():";
+            const bool debug = false;
+
+            if (burnQueueMember > burnQueue.Count || burnQueueMember < 0)
+            {
+                echoDebug(debugName + "Index of " + burnQueueMember + " is out of range.");
+                return false;
+            }
+            if (burnQueue[burnQueueMember] == null)
+            {
+                echoDebug(debugName + "burnQueue index " + burnQueueMember + " is null.");
+                return false;
+            }
+
+            if (burnQueue[burnQueueMember].timesBurned == 0)
+            {
+                echoDebug("burnQueue[" + burnQueueMember + "] has not been committed to a disc.");
+                return false;
+            }
+
+            for (int i = 0; i < burnQueue[burnQueueMember].files.Count; i++)
+            {
+                int locationInAllFiles = findFileByFullPath(burnQueue[burnQueueMember].files[i].originalPath);
+
+                if (locationInAllFiles == -1)
+                {
+                    echoDebug(debugName + "The file \"" + burnQueue[burnQueueMember].files[i].originalPath + "\" was not found in " +
+                        "allFiles. This may indicate corruption or that data was mishandled during file deletion or creation of " +
+                        "this OneBurn.");
+                    return false;
+                }
+
+                int thisBurnInFile = allFiles[locationInAllFiles].discsBurned.IndexOf(burnQueue[burnQueueMember].name);
+                if (thisBurnInFile > -1)
+                {
+                    allFiles[locationInAllFiles].discsBurned.RemoveAt(thisBurnInFile);
+                }
+                else
+                {
+                    echoDebug(debugName + "The OneBurn titled \"" + burnQueue[burnQueueMember].name + "\" at burnQueue index " +
+                        burnQueueMember + " did not appear in the file \"" + allFiles[locationInAllFiles].originalPath +
+                        "\". This may indicate corruption in the struct or an error in how this OneBurn was marked burned.");
+                    return false;
+                }
+            }
+
+            burnQueue[burnQueueMember].timesBurned--;
+            return true;
         }
 
 
@@ -1214,22 +1281,6 @@ namespace DiscDoingsWPF
             return theList;
         }
 
-
-        //Populate the burnQueue using files that are in allFiles
-        public bool populateBurnQueueList(long sizeOfVolume)
-        {
-            OneBurn aBurn = generateBurnQueueButGood(sizeOfVolume);
-            while (aBurn.files.Count > 0)
-            {
-                burnQueue.Add(aBurn);
-                aBurn = new OneBurn();
-                aBurn = generateBurnQueueButGood(sizeOfVolume);
-            }
-
-            
-            return true;
-
-        }
         
                                         //End burn organizing related code
 

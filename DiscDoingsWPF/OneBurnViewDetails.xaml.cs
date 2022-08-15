@@ -53,6 +53,7 @@ namespace DiscDoingsWPF
             spaceRemaining += " / ";
             spaceRemaining += burnpoolref.burnQueue[burnQueueMember].spaceRemaining;
             OneBurnViewDetails_SpaceUsedUnused.Content = spaceRemaining;
+            OneBurnViewDetails_TimesBurned.Content = burnpoolref.burnQueue[burnQueueMember].timesBurned;
 
             OneBurnListBox.Items.Clear();
             for (int i = 0; i < burnpoolref.burnQueue[burnQueueMember].files.Count; i++)
@@ -63,7 +64,7 @@ namespace DiscDoingsWPF
 
         private void RemoveFileFromOneBurnButtonClick(object sender, RoutedEventArgs e)
         {
-            const bool debug = true;
+            const bool debug = false;
             const string debugName = "OneBurnViewDetails::RemoveFileFromOneBurnButtonClick():";
 
             if (debug)

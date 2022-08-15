@@ -44,6 +44,12 @@ namespace DiscDoingsWPF
         public BurnPoolManager burnpool;
         private BurnPoolManager lastSavedInstance; //Use to keep track of whether changes have been made
 
+        //This is used by the informUser() function, it's to make those function calls a little more readable
+        public enum userMessages
+        {
+            DISC_ALREADY_BURNED
+        }
+
         //public int filesInChecksumQueue; //Keep track of how many files are waiting for checksum calculations
 
         const string applicationName = "Burn Manager", applicationExtension = "chris";
@@ -186,8 +192,8 @@ namespace DiscDoingsWPF
 
             debugEcho("Initializing burnpool");
             burnpool = new BurnPoolManager(this);
-            updateMainScreenFileView();
-            populateBurnWindow();
+            VolumeSizeTextInput.Text = "";
+            updateAllWindows();
 
             lastSavedInstance = new BurnPoolManager(burnpool);
         }
@@ -220,10 +226,53 @@ namespace DiscDoingsWPF
             await Task.Run(() => { debugEcho(text); });
         }
 
+        public void informUser(string text)
+        {
+            System.Windows.MessageBox.Show(text);
+        }
+
+        public void informUser(userMessages message)
+        {
+            string usertext = "Initialized Value";
+            switch (message)
+            {
+                case 0:
+                    usertext = "This disc has been burned; files cannot be removed.";
+                    break;
+            }
+            System.Windows.MessageBox.Show(usertext);
+        }
+
+        //Show details for a FileProps in the main list box
+        private void FileViewListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            const string debugName = "MainWindow::FileViewListBox_MouseDoubleClick():";
+            if (AllFilesListBox.SelectedItems.Count != 1)
+            {
+                return;
+            }
+
+            int? filePropsToGet = burnpool.findFileByFullPath(AllFilesListBox.SelectedItem.ToString());
+            if (filePropsToGet == null)
+            {
+                debugEcho(debugName + "Invalid selection");
+                return;
+            }
+
+            var fileViewDetails = new FilePropsViewDetails(ref burnpool, this, (int)filePropsToGet);
+            fileViewDetails.Owner = this;
+            fileViewDetails.Topmost = false;
+            //this.Name = "OneBurnViewDetails";
+
+            fileViewDetails.Show();
+        }
+
         //Show details for a OneBurn in the burn view list box
         private void BurnViewListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            int? oneBurnToGet = burnpool.getBurnQueueFileByName(BurnViewListBox.SelectedItem.ToString());
+            int? oneBurnToGet = 0;
+            oneBurnToGet = burnpool.getBurnQueueFileByName(BurnViewListBox.SelectedItem.ToString());
+
             if(oneBurnToGet == null)
             {
                 debugEcho("BurnViewListBox: Invalid selection");
@@ -238,6 +287,24 @@ namespace DiscDoingsWPF
             burnViewDetails.Show();
         }
 
+        private void BurnedDiscsListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            int? oneBurnToGet = 0;
+            oneBurnToGet = burnpool.getBurnQueueFileByName(BurnedDiscsListBox.SelectedItem.ToString());
+
+            if (oneBurnToGet == null)
+            {
+                debugEcho("BurnViewListBox: Invalid selection");
+                return;
+            }
+
+            var burnViewDetails = new OneBurnViewDetails(ref burnpool, (int)oneBurnToGet, this);
+            burnViewDetails.Owner = this;
+            burnViewDetails.Topmost = false;
+            //this.Name = "OneBurnViewDetails";
+
+            burnViewDetails.Show();
+        }
 
         //The button that instructs the program to calculate burn lists based on the files added
         private async void CalculateBurnListButtonClick(object sender, RoutedEventArgs e)
@@ -282,6 +349,98 @@ namespace DiscDoingsWPF
                 operationsInProgressDialog();
             }
 
+        }
+
+
+        //Called when the user instructs the program to mark a OneBurn as burned to disc
+        private void MarkBurnedButtonClick(object sender, RoutedEventArgs e)
+        {
+            const string debugName = "MainWindow::MarkBurnedButtonClick():";
+
+            if (BurnViewListBox.SelectedItems.Count == 0)
+            {
+                string debugtext = "Please select a burn to mark as burned.";
+                System.Windows.MessageBox.Show(debugtext);
+                return;
+            }
+
+            /*
+            MessageBoxResult result = System.Windows.MessageBox.Show("Are you sure you want to remove the burn list \"" +
+                BurnViewListBox.SelectedItem.ToString() + "\"?",
+                    applicationName, MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.No)
+            {
+                return;
+            }
+            */
+
+            int? oneBurnToCommit = 0;
+
+            try
+            {
+                oneBurnToCommit = burnpool.getBurnQueueFileByName(BurnViewListBox.SelectedItem.ToString());
+            }
+            catch (NullReferenceException)
+            {
+                debugEcho(debugName + "Null reference thrown when attempting burnpool.getBurnQueueFileByName. Was a OneBurn" +
+                    " selected in the ListView?");
+                return;
+            }
+
+            if (oneBurnToCommit == null)
+            {
+                debugEcho(debugName + "The OneBurn \"" + BurnViewListBox.SelectedItem.ToString() + "\" was not found in burnQueue.");
+                return;
+            }
+
+            burnpool.commitOneBurn((int)oneBurnToCommit);
+
+            updateAllWindows();
+        }
+
+        private void MarkUnburnedButtonClick(object sender, RoutedEventArgs e)
+        {
+            const string debugName = "MainWindow::MarkUnburnedButtonClick():";
+
+            if (BurnedDiscsListBox.SelectedItems.Count == 0)
+            {
+                string debugtext = "Please select a burn to unmark as burned.";
+                System.Windows.MessageBox.Show(debugtext);
+                return;
+            }
+
+            /*
+            MessageBoxResult result = System.Windows.MessageBox.Show("Are you sure you want to remove the burn list \"" +
+                BurnViewListBox.SelectedItem.ToString() + "\"?",
+                    applicationName, MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.No)
+            {
+                return;
+            }
+            */
+
+            int? oneBurnToUncommit = 0;
+
+            try
+            {
+                oneBurnToUncommit = burnpool.getBurnQueueFileByName(BurnedDiscsListBox.SelectedItem.ToString());
+            }
+            catch (NullReferenceException)
+            {
+                debugEcho(debugName + "Null reference thrown when attempting burnpool.getBurnQueueFileByName. Was a OneBurn" +
+                    " selected in the ListView?");
+                return;
+            }
+
+            if (oneBurnToUncommit == null)
+            {
+                debugEcho(debugName + "The OneBurn \"" + BurnedDiscsListBox.SelectedItem.ToString() + "\" was not found in burnQueue.");
+                return;
+            }
+
+            burnpool.uncommitOneBurn((int)oneBurnToUncommit);
+
+            updateAllWindows();
         }
 
         private void RemoveBurnButtonClick(object sender, RoutedEventArgs e)
@@ -467,7 +626,22 @@ namespace DiscDoingsWPF
             BurnViewListBox.Items.Clear();
             for (int i = 0; i < burnpool.burnQueue.Count; i++)
             {
-                BurnViewListBox.Items.Add(burnpool.burnQueue[i].name);
+                if (burnpool.burnQueue[i].timesBurned == 0)
+                {
+                    BurnViewListBox.Items.Add(burnpool.burnQueue[i].name);
+                }
+            }
+        }
+
+        private void populateBurnedWindow()
+        {
+            BurnedDiscsListBox.Items.Clear();
+            for (int i = 0; i < burnpool.burnQueue.Count; i++)
+            {
+                if (burnpool.burnQueue[i].timesBurned > 0)
+                {
+                    BurnedDiscsListBox.Items.Add(burnpool.burnQueue[i].name);
+                }
             }
         }
 
@@ -476,6 +650,7 @@ namespace DiscDoingsWPF
         {
             updateMainScreenFileView();
             populateBurnWindow();
+            populateBurnedWindow();
         }
 
         private async void updateAllWindowsWhenTasksComplete()
