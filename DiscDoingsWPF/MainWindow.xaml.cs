@@ -936,8 +936,7 @@ namespace DiscDoingsWPF
                     }
                     burnpool.mainWindow = this;
                     lastSavedInstance = new BurnPoolManager(burnpool);
-                    updateMainScreenFileView();
-                    populateBurnWindow();
+                    updateAllWindows();
                 }
                 catch
                 {

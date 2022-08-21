@@ -61,7 +61,7 @@ namespace DiscDoingsWPF
             public long spaceUsed { get; set; }
             public List<FileProps> files { get; set; } //Files to be burned. Do not alter this directly!
             public string name { get; set; }
-            public int timesBurned; //The number of times this OneBurn has been burned to a physical disc
+            public int timesBurned { get; set; } //The number of times this OneBurn has been burned to a physical disc
             
             
 
@@ -191,7 +191,7 @@ namespace DiscDoingsWPF
             allFilesNotInBurnQueue = new List<FileProps>();
             burnQueue = new List<OneBurn>();
             //completedBurns = new List<OneBurn>();
-            thisPool = "Untitled Pool";
+            thisPool = "Untitled Disc";
             lastError = "";
             hashTypeUsed = hashTypes.SHA256;
             mainWindow = null;
@@ -203,7 +203,7 @@ namespace DiscDoingsWPF
             allFilesNotInBurnQueue = new List<FileProps>();
             burnQueue = new List<OneBurn>();
             //completedBurns = new List<OneBurn>();
-            thisPool = "Untitled Pool";
+            thisPool = "Untitled Disc";
             lastError = "";
             hashTypeUsed = hashTypes.SHA256;
             mainWindow = programMainWindow;
@@ -301,6 +301,7 @@ namespace DiscDoingsWPF
 
             const string validPath = @"(^\\{2}.+\\(.)+[^\\])|(([a-z]|[A-Z])+:\\.+[^\\])",
                 debugName = "addFileAsync:";
+
             Regex compare = new Regex(validPath);
 
             if (!storageFileIn.IsAvailable)
@@ -348,6 +349,8 @@ namespace DiscDoingsWPF
                     hashString += hashtime[i].ToString();
                 }
                 newFile.checksum = hashtime;
+
+
 
                 allFiles.Add(newFile);
                 allFilesNotInBurnQueue.Add(newFile);
