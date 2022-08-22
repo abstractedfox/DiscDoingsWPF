@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DiscDoingsWPF"
         mc:Ignorable="d"
-        Title="FilePropsViewDetails" Height="400" Width="600">
+        Title="FilePropsViewDetails" Height="480" Width="600">
     <Grid>
         <StackPanel Orientation="Vertical" Margin="8,8,8,8">
             <StackPanel Orientation="Horizontal">
@@ -21,6 +21,8 @@
                     <Label Content="Added on:"
                     FontSize="12"/>
                     <Label Content="Last modified when added:"
+                    FontSize="12"/>
+                    <Label Content="Status as of last file audit:"
                     FontSize="12"/>
                     <Label Content="Discs burned:"
                     FontSize="12"/>
@@ -49,6 +51,9 @@
                     Content="Initialized Label"
                        FontSize="12"/>
                     <Label x:Name="FilePropsViewDetails_LastModified"
+                    Content="Initialized Label"
+                       FontSize="12"/>
+                    <Label x:Name="FilePropsViewDetails_Status"
                     Content="Initialized Label"
                        FontSize="12"/>
                 </StackPanel>

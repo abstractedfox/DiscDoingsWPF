@@ -55,6 +55,7 @@ namespace DiscDoingsWPF
             FilePropsViewDetails_Checksum.Text = checksum;
             FilePropsViewDetails_DateAdded.Content = burnpoolref.allFiles[allFilesIndex].timeAdded;
             FilePropsViewDetails_LastModified.Content = burnpoolref.allFiles[allFilesIndex].lastModified;
+            FilePropsViewDetails_Status.Content = burnpoolref.allFiles[allFilesIndex].fileStatus;
 
             if (burnpoolref.allFiles[allFilesIndex].discsBurned.Count == 0)
             {

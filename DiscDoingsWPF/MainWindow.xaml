@@ -64,16 +64,20 @@
                         
                         
                         
-                        <Button Content="Add Files"
+                        <Button Content="Add Files!"
                                 Click="OpenFilePicker"
                                 HorizontalAlignment="Center"/>
 
+                        <Button Content="Audit All Files!" 
+                            HorizontalAlignment="Center" 
+                            Margin="0,10,0,0"
+                            Click="compareChecksums"/>
 
                         <Button Content="Open Debug View" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
                             Click="openDebugWindow"/>
-                        
+
                         <Button Content="Mixed use button" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
