@@ -24,16 +24,25 @@ namespace DiscDoingsWPF
         public hashTypes hashTypeUsed { get; set; }
         public MainWindow? mainWindow; //This will be used to get access to the debug string in MainWindow
 
-        public const int formatVersion = 2;
+        public const int formatVersion = 3;
         //formatVersion 1 adds the hashTypes enum, the hashType field to FileProps,
         //the HashTypeUsed field to BurnPoolManager, the createHashMD5 function, and this field indicating the format version.
         //Version 2: Added "timesBurned" field to OneBurn and remoived the "List<OneBurn> completedBurns" field
+        //Version 3: Added "public errorCode fileStatus" to FileProps, to keep track of this file's standing relative to the example in the file system
 
 
         public enum hashTypes
         {
             MD5,
             SHA256
+        }
+
+        public enum errorCode
+        {
+            FILES_EQUAL,
+            FILE_NOT_FOUND_IN_FILESYSTEM,
+            FILE_NOT_FOUND_IN_ARRAY,
+            CHECKSUMS_DIFFERENT
         }
 
         //the get; set; properties do a lot of stuff but in this case they're necessary for serialization
@@ -48,6 +57,7 @@ namespace DiscDoingsWPF
             public byte[] checksum { get; set; } //Checksum of this file
             public string timeAdded { get; set; } //Date and time added to this pool
             public hashTypes hashType { get; set; }
+            public errorCode fileStatus { get; set; }
 
             public string lastModified { get; set; } //Last modified time from file system
             public bool isExtra { get; set; } //Set this flag to true if this file is intentionally meant to be burned to more than one disc
@@ -193,7 +203,7 @@ namespace DiscDoingsWPF
             //completedBurns = new List<OneBurn>();
             thisPool = "Untitled Disc";
             lastError = "";
-            hashTypeUsed = hashTypes.SHA256;
+            hashTypeUsed = hashTypes.MD5;
             mainWindow = null;
         }
 
@@ -205,7 +215,7 @@ namespace DiscDoingsWPF
             //completedBurns = new List<OneBurn>();
             thisPool = "Untitled Disc";
             lastError = "";
-            hashTypeUsed = hashTypes.SHA256;
+            hashTypeUsed = hashTypes.MD5;
             mainWindow = programMainWindow;
         }
 
@@ -341,6 +351,8 @@ namespace DiscDoingsWPF
                 newFile.lastModified = fInfo.LastWriteTime.ToString();
                 newFile.isExtra = false;
                 newFile.discsBurned = new List<String>();
+                newFile.fileStatus = errorCode.FILES_EQUAL;
+
 
                 string hashString = "";
                 byte[] hashtime = createHash(fInfo);
@@ -350,7 +362,15 @@ namespace DiscDoingsWPF
                 }
                 newFile.checksum = hashtime;
 
-
+                for (int i = 0; i < allFiles.Count; i++)
+                {
+                    if (allFiles[i].originalPath == newFile.originalPath)
+                    {
+                        //Do something that tells the user this file is a duplicate
+                        echoDebug(debugName + "Duplicates found: [" + allFiles[i].originalPath + "] and [" + newFile.originalPath + "]");
+                        return;
+                    }
+                }
 
                 allFiles.Add(newFile);
                 allFilesNotInBurnQueue.Add(newFile);
@@ -523,6 +543,8 @@ namespace DiscDoingsWPF
         public byte[] createHashSHA256(FileInfo fInfo)
         {
             const string debugName = "createHashSHA256:";
+            const bool debug = true;
+            if (debug) echoDebugA(debugName + "Start");
             //do the hashing
             using (SHA256 hashtime = SHA256.Create())
             {
@@ -531,6 +553,7 @@ namespace DiscDoingsWPF
                     using (FileStream dataToHash = fInfo.Open(FileMode.Open))
                     {
                         byte[] hashValue = hashtime.ComputeHash(dataToHash);
+                        if (debug) echoDebugA(debugName + "Returning");
                         return hashValue;
 
                     }
@@ -554,7 +577,11 @@ namespace DiscDoingsWPF
         public byte[] createHashMD5(FileInfo fInfo)
         {
             const string debugName = "createHashMD5:";
+            const bool debug = false;
             //do the hashing
+
+            if (debug) echoDebugA(debugName + "Start");
+
             using (MD5 hashtime = MD5.Create())
             {
                 try
@@ -562,6 +589,7 @@ namespace DiscDoingsWPF
                     using (FileStream dataToHash = fInfo.Open(FileMode.Open))
                     {
                         byte[] hashValue = hashtime.ComputeHash(dataToHash);
+                        if (debug) echoDebugA(debugName + "Returning");
                         return hashValue;
 
                     }
@@ -609,7 +637,70 @@ namespace DiscDoingsWPF
             return true;
         }
 
+        //Pass an index in allFiles. It will find the same file in the file system, calculate a fresh checksum of the file,
+        //and return whether there is a match
+        public errorCode compareChecksumToFileSystem(int allFilesIndex)
+        {
+            const string debugName = "BurnPoolManager::compareChecksumToFileSystem():";
+            const bool debug = true;
+            
 
+            if (allFilesIndex < 0 || allFilesIndex > allFiles.Count)
+            {
+                return errorCode.FILE_NOT_FOUND_IN_ARRAY;
+            }
+
+            FileInfo fInfo = new FileInfo(allFiles[allFilesIndex].originalPath);
+
+            if (!fInfo.Exists)
+            {
+                return errorCode.FILE_NOT_FOUND_IN_FILESYSTEM;
+            }
+
+
+
+            byte[] checksum = createHash(fInfo);
+
+            if (byteArrayEqual(checksum, allFiles[allFilesIndex].checksum))
+            {
+                return errorCode.FILES_EQUAL;
+            }
+
+            return errorCode.CHECKSUMS_DIFFERENT;
+        }
+
+        //Recalculate the checksum for a file based off the example in the file system. Returns false if there is an error.
+        public bool recalculateChecksum(int allFilesIndex)
+        {
+            const string debugName = "BurnPoolManager::recalculateChecksum():";
+            const bool debug = true;
+
+            if (debug) echoDebug(debugName + "Start");
+            
+            if (allFilesIndex < 0 || allFilesIndex > allFiles.Count)
+            {
+                echoDebug(debugName + "Passed index of " + allFilesIndex + " is out of range.");
+                return false;
+            }
+
+            FileProps replacementFile = allFiles[allFilesIndex];
+
+            FileInfo fInfo = new FileInfo(replacementFile.originalPath);
+
+            if (!fInfo.Exists)
+            {
+                echoDebug(debugName + "The file [" + replacementFile.originalPath + "] does not exist.");
+                return false;
+            }
+
+            replacementFile.checksum = createHash(fInfo);
+            replacementFile.fileStatus = errorCode.FILES_EQUAL;
+
+            allFiles[allFilesIndex] = replacementFile;
+            if (debug) echoDebug(debugName + "Complete");
+            return true;
+
+        }
 
                                             //Begin burn organizing related code
 

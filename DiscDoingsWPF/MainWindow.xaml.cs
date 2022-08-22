@@ -33,6 +33,13 @@ namespace DiscDoingsWPF
     /// </summary>
     /// 
 
+    //Use this to associate a given error code with an index in the burn pool
+    struct errorCodeAndIndex
+    {
+        public BurnPoolManager.errorCode resultCode;
+        public int index;
+    }
+
     
 
     public partial class MainWindow : Window
@@ -109,7 +116,66 @@ namespace DiscDoingsWPF
             
         }
 
-        
+        private async void compareChecksums(object sender, RoutedEventArgs e)
+        {
+            const string debugName = "MainWindow::compareChecksums():";
+            const bool debug = true;
+            if (debug) debugEcho(debugName + "Start");
+            List<errorCodeAndIndex> badResults = await auditFiles();
+
+            if (badResults.Count == 0)
+            {
+                debugEcho(debugName + "All files appear normal!");
+                return;
+            }
+
+            for (int i = 0; i < badResults.Count; i++)
+            {
+                string outputstring = "Index " + badResults[i].index + " returned " + badResults[i].resultCode.ToString();
+                debugEcho(debugName + outputstring);
+            }
+            if (debug) debugEcho(debugName + "Complete");
+        }
+
+        //Audit the files in the burn pool against their file system counterparts, seeing that they still exist and have the same
+        //checksums.
+        //Also assigns these values to the 'status' property for each file.
+        private async Task<List<errorCodeAndIndex>> auditFiles()
+        {
+            const string debugName = "MainWindow::auditFiles():";
+            const bool debug = false;
+            debugEcho(debugName + "Starting asynchronous checksum check.");
+
+            List<errorCodeAndIndex> badResults = new List<errorCodeAndIndex>();
+            List<Task> taskQueue = new List<Task>();
+
+
+            await Task.Run(() => {
+                //System.Windows.MessageBox.Show("WE HERE");
+                for (int i = 0; i < burnpool.allFiles.Count; i++)
+                {
+                    errorCodeAndIndex asdf;
+                    asdf.resultCode = burnpool.compareChecksumToFileSystem(i);
+                    asdf.index = i;
+
+                    
+                    BurnPoolManager.FileProps replacementFile = burnpool.allFiles[i];
+                    replacementFile.fileStatus = asdf.resultCode;
+                    burnpool.allFiles[i] = replacementFile;
+                    //Yes, this is the only way to alter resultCode; it's a value type and there's no handy way to modify it directly
+
+                    if (asdf.resultCode != BurnPoolManager.errorCode.FILES_EQUAL) badResults.Add(asdf);
+
+                    if (debug) debugEchoAsync(debugName + burnpool.allFiles[i].fileName + ": " + asdf.ToString());
+                }
+            });
+
+            
+
+            if (debug) debugEcho(debugName + "Done");
+            return badResults;
+
+        }
 
         //Goes to the ListBox in the burn view
         private void ChooseBurnList(object sender, SelectionChangedEventArgs args)
@@ -518,8 +584,10 @@ namespace DiscDoingsWPF
 
             
 
-            await Task.Run(() => { 
+            await Task.Run(() => {
                 //int filesPrior = burnpool.allFiles.Count;
+                List<BurnPoolManager.FileProps> newFileBuffer = new List<BurnPoolManager.FileProps>();
+
                 foreach (StorageFile file in files)
                 {
                     //burnpool.addFile(file);
@@ -846,6 +914,7 @@ namespace DiscDoingsWPF
         private void MixedUseButton(object sender, RoutedEventArgs e)
         {
             //System.Windows.MessageBox.Show(getDirectoryFromPath("C:\\BALLS\\dick\\ hellloi peesnis \\BALLER.jpg"));
+            burnpool.recalculateChecksum(0);
         }
 
         private async void FileOpen_Click(object sender, RoutedEventArgs e)
