@@ -38,7 +38,8 @@
             <ListBox 
                 x:Name="OneBurnListBox"
                 SelectionMode="Extended"
-                Height="469" />
+                Height="469" 
+                MouseDoubleClick="OneBurnListBox_MouseDoubleClick" />
             <Button 
                 Content="Remove file from this burn"
                 Click="RemoveFileFromOneBurnButtonClick"

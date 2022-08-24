@@ -54,7 +54,8 @@ namespace DiscDoingsWPF
         //This is used by the informUser() function, it's to make those function calls a little more readable
         public enum userMessages
         {
-            DISC_ALREADY_BURNED
+            DISC_ALREADY_BURNED,
+            FILE_AUDIT_FAILED
         }
 
         //public int filesInChecksumQueue; //Keep track of how many files are waiting for checksum calculations
@@ -286,6 +287,12 @@ namespace DiscDoingsWPF
             debugText += text += "\n";
         }
 
+        //For output that isn't strictly debug related & may be useful to users
+        public void logOutput(string text)
+        {
+            debugText += text += "\n";
+        }
+
 
         public async void debugEchoAsync(string text)
         {
@@ -302,8 +309,11 @@ namespace DiscDoingsWPF
             string usertext = "Initialized Value";
             switch (message)
             {
-                case 0:
+                case userMessages.DISC_ALREADY_BURNED:
                     usertext = "This disc has been burned; files cannot be removed.";
+                    break;
+                case userMessages.FILE_AUDIT_FAILED:
+                    usertext = "File discrepancies were detected, please check the log.";
                     break;
             }
             System.Windows.MessageBox.Show(usertext);
@@ -336,8 +346,16 @@ namespace DiscDoingsWPF
         //Show details for a OneBurn in the burn view list box
         private void BurnViewListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
+            const string debugName = "MainWindow::BurnViewListBox_MouseDoubleClick():";
             int? oneBurnToGet = 0;
-            oneBurnToGet = burnpool.getBurnQueueFileByName(BurnViewListBox.SelectedItem.ToString());
+            try
+            {
+                oneBurnToGet = burnpool.getBurnQueueFileByName(BurnViewListBox.SelectedItem.ToString());
+            }
+            catch (NullReferenceException)
+            {
+                debugEcho(debugName + "BurnViewListBox.SelectedItem.ToString() Null reference exception");
+            }
 
             if(oneBurnToGet == null)
             {
@@ -459,7 +477,12 @@ namespace DiscDoingsWPF
                 return;
             }
 
-            burnpool.commitOneBurn((int)oneBurnToCommit);
+            BurnPoolManager.errorCode result = burnpool.commitOneBurn((int)oneBurnToCommit, true);
+
+            if (result != BurnPoolManager.errorCode.SUCCESS)
+            {
+                informUser(userMessages.FILE_AUDIT_FAILED);
+            }
 
             updateAllWindows();
         }
@@ -551,7 +574,7 @@ namespace DiscDoingsWPF
         //the list while operations are pending. However, it does check for burnQueueTasks
         private async void OpenFilePicker(object sender, RoutedEventArgs e)
         {
-            const bool debugVerbose = true;
+            const bool debugVerbose = true, msgBoxes = false;
             const string debugName = "OpenFilePicker:";
             FileOpenPicker picker = new FileOpenPicker();
             //List < Task > tasks = new List<Task>();
@@ -559,7 +582,7 @@ namespace DiscDoingsWPF
             //picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
             picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
             picker.FileTypeFilter.Add("*");
-
+            
             
 
             if (getPendingTasks() > 0)
@@ -576,6 +599,15 @@ namespace DiscDoingsWPF
             WinRT.Interop.InitializeWithWindow.Initialize(picker, handle);
             IReadOnlyList<StorageFile> files = await picker.PickMultipleFilesAsync();
 
+            if (msgBoxes) System.Windows.MessageBox.Show("File picker happened");
+
+
+            if (files.Count == 0)
+            {
+                return;
+            }
+
+
             if (debugVerbose)
             {
                 //MessageBox.Show("IReadOnlyList<StorageFile> files is now populated");
@@ -587,7 +619,7 @@ namespace DiscDoingsWPF
             await Task.Run(() => {
                 //int filesPrior = burnpool.allFiles.Count;
                 List<BurnPoolManager.FileProps> newFileBuffer = new List<BurnPoolManager.FileProps>();
-
+                if (msgBoxes) System.Windows.MessageBox.Show("task START");
                 foreach (StorageFile file in files)
                 {
                     //burnpool.addFile(file);
@@ -607,6 +639,8 @@ namespace DiscDoingsWPF
                 do
                 {
                     tasksInProgress = 0;
+                    //debugEcho("DO!!!");
+                    if (msgBoxes) System.Windows.MessageBox.Show("WE ARE DOING!");
                     for (int i = 0; i < fileAddTasks.Count; i++)
                     {
                         if (!fileAddTasks[i].IsCompleted)
@@ -633,9 +667,178 @@ namespace DiscDoingsWPF
 
             updateAllWindowsWhenTasksComplete();
             cleanUpTaskLists();
+
+
+        }
+
+        private async void OpenFolderPicker(object sender, RoutedEventArgs e)
+        {
+            const bool debugVerbose = true;
+            const string debugName = "OpenFolderPicker:";
+            FolderPicker picker = new FolderPicker();
+            //List < Task > tasks = new List<Task>();
+            picker.ViewMode = PickerViewMode.List;
+            //picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
+            picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+            picker.FileTypeFilter.Add("*");
+
+
+
+            if (getPendingTasks() > 0)
+            {
+                System.Windows.MessageBox.Show("Some operations are still in progress. Please wait for operations " +
+                    "to finish before adding more files.");
+                return;
+            }
+
+            //Windows.Storage.StorageFile file = await picker.PickSingleFileAsync();
+
+            var win32moment = new System.Windows.Interop.WindowInteropHelper(this);
+            IntPtr handle = win32moment.Handle;
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, handle);
+            Windows.Storage.StorageFolder theFolder = await picker.PickSingleFolderAsync();
+
+            if (theFolder == null)
+            {
+                debugEcho(debugName + "theFolder = null, this is normal if the user clicked cancel.");
+                return;
+            }
+
+            if (debugVerbose) debugEcho(debugName + "Adding folder " + theFolder.Name);
+            IReadOnlyList<IStorageItem> foldercontents = await theFolder.GetItemsAsync();
+            fileAddTasks.Add(addFolderRecursive(foldercontents, true));
+
+            //System.Windows.MessageBox.Show(fileAddTasks.Count.ToString());
+
+            await Task.Run(() => {
+                if (debugVerbose) debugEcho(debugName + "Starting folder task check loop");
+                
+                //addFolderRecursive(theFolder);
+
+                int tasksInProgress = 0, lastTasksInProgress = 0;
+                bool nullcatch = false;
+                do
+                {
+                    tasksInProgress = 0;
+                    nullcatch = false;
+                    if (fileAddTasks == null)
+                    {
+                        //The number of tasks in progress can vary while this function runs, and can even be null if this
+                        //block is reached before addFolderRecursive returns. This ensures it doesn't begin counting until at
+                        //least one task has been added to the task list.
+                        //This could present a future problem if someone has a really fast computer, so hopefully that doesn't happen
+                        //debugEcho("Woppa!!");
+                        nullcatch = true;
+                        break;
+                    }
+                    for (int i = 0; i < fileAddTasks.Count; i++)
+                    {
+                        
+                        if (fileAddTasks == null || fileAddTasks[i] == null || i > fileAddTasks.Count)
+                        {
+                            //The number of tasks in progress can vary while this function runs, and can even be null if this
+                            //block is reached before addFolderRecursive returns. This ensures it doesn't begin counting until at
+                            //least one task has been added to the task list.
+                            //This could present a future problem if someone has a really fast computer, so hopefully that doesn't happen
+                            //debugEcho("Woppa!!");
+                            nullcatch = true;
+                            break;
+                        }
+                        
+                        if (!fileAddTasks[i].IsCompleted)
+                        {
+                            tasksInProgress++;
+                        }
+                    }
+                    if (tasksInProgress != lastTasksInProgress && debugVerbose)
+                    {
+                        debugEcho(debugName + "Tasks in progress: " + tasksInProgress);
+                        lastTasksInProgress = tasksInProgress;
+                    }
+                    //StatusField.Content = (debugName + "Tasks in progress: " + tasksInProgress);
+
+                }
+                while (tasksInProgress > 0 || nullcatch == true);
+
+                if (debugVerbose) debugEcho(debugName + "Ending folder task check loop");
+            });
+
+            updateAllWindowsWhenTasksComplete();
+            cleanUpTaskLists();
+
+            if (debugVerbose)
+            {
+                //MessageBox.Show("All files have been added to burnpool");
+                debugEcho(debugName + "All files have been added to burnpool");
+            }
+
             //updateAllWindows();
 
 
+        }
+
+        private Task addFolderRecursive(IReadOnlyList<IStorageItem> foldercontents, bool recursion)
+        {
+            const string debugName = "MainWindow::addFolderRecursive():", friendlyName = debugName;
+            const bool debugVerbose = true;
+            //IReadOnlyList<IStorageItem> foldercontents = await theFolder.GetItemsAsync();
+
+            List<StorageFile> files = new List<StorageFile>();
+            List<StorageFolder> folders = new List<StorageFolder>();
+
+            foreach (IStorageItem item in foldercontents)
+            {
+                //if (debugVerbose) debugEcho("BLORF");
+                if (item.IsOfType(StorageItemTypes.File))
+                {
+                    files.Add((StorageFile)item);
+                }
+                if (item.IsOfType(StorageItemTypes.Folder) && recursion)
+                {
+                    startNewFolderTask((StorageFolder)item);
+                }
+            }
+
+
+
+            //IReadOnlyList<StorageFile> files = (IReadOnlyList<StorageFile>)await theFolder.GetItemsAsync();
+
+            if (debugVerbose)
+            {
+                //MessageBox.Show("IReadOnlyList<StorageFile> files is now populated");
+                debugEcho(debugName + "IReadOnlyList<StorageFile> files is now populated");
+            }
+
+
+
+            return Task.Run(() => {
+                //int filesPrior = burnpool.allFiles.Count;
+                List<BurnPoolManager.FileProps> newFileBuffer = new List<BurnPoolManager.FileProps>();
+
+                foreach (StorageFile file in files)
+                {
+                    //burnpool.addFile(file);
+                    try
+                    {
+                        fileAddTasks.Add(burnpool.addFileAsync(file));
+                    }
+                    catch
+                    {
+                        debugEcho(debugName + "Exception while adding files to the burnpool.");
+                        System.Windows.MessageBox.Show(debugName + "Exception while adding files to the burnpool.", applicationName);
+                    }
+                }
+                //updateAllWindowsWhenTasksComplete();
+                //cleanUpTaskLists();
+            });
+
+            if (debugVerbose) debugEcho(debugName + "Tasks completed");
+        }
+
+        private async void startNewFolderTask(StorageFolder folder)
+        {
+            IReadOnlyList<IStorageItem> newfolder = await folder.GetItemsAsync();
+            fileAddTasks.Add(addFolderRecursive(newfolder, true));
         }
 
         //Handler for the button that removes files
@@ -723,10 +926,16 @@ namespace DiscDoingsWPF
 
         private async void updateAllWindowsWhenTasksComplete()
         {
+            const bool debug = true, msgBoxes = false;
+            const string debugName = "MainWindow::updateAllWindowsWhenTasksComplete():";
+            if (debug) debugEcho(debugName + "Start");
+            if (msgBoxes) System.Windows.MessageBox.Show(debugName + "Start");
             await Task.Run(() =>
             {
                 while (getPendingTasks() > 0) ;
             });
+            if (debug) debugEcho(debugName + "Updating windows now.");
+            if (msgBoxes) System.Windows.MessageBox.Show(debugName + "End");
             updateAllWindows();
         }
 
@@ -755,24 +964,79 @@ namespace DiscDoingsWPF
         }
 
         //Removes all completed tasks from fileAddTasks and burnQueueTasks
-        private void cleanUpTaskLists()
+        private async void cleanUpTaskLists()
         {
-            for (int i = 0; i < fileAddTasks.Count; i++)
+            const string debugName = "MainWindow::cleanUpTaskLists():";
+            const bool debug = true, msgBoxes = true;
+
+            if (debug) debugEcho(debugName + "Start");
+
+            do
             {
-                if (fileAddTasks[i].IsCompleted)
-                {
-                    fileAddTasks.RemoveAt(i);
-                    i = -1;
-                }
+                await Task.Delay(10000);
             }
-            for (int i = 0; i < fileAddTasks.Count; i++)
-            {
-                if (burnQueueTasks[i].IsCompleted)
+            while (getPendingTasks() > 0);
+
+            //The task lists can change in size while this function is running when recursive folder adds are running, so a lot
+            //of seemingly arbitrary checks are utilized.
+
+            await Task.Run(() => { 
+                bool rangeCheck = false;
+                do
                 {
-                    burnQueueTasks.RemoveAt(i);
-                    i = -1;
+                    rangeCheck = false;
+                    for (int i = 0; i < fileAddTasks.Count; i++)
+                    {
+                        try
+                        {
+                            if (i < fileAddTasks.Count && fileAddTasks[i].IsCompleted)
+                            {
+                                fileAddTasks.RemoveAt(i);
+                                i = -1;
+                            }
+                            else if (i > fileAddTasks.Count)
+                            {
+                                rangeCheck = true;
+                                if (msgBoxes) System.Windows.MessageBox.Show(debugName + "i > fileAddTasks.count");
+                                break;
+                            }
+                        }
+                        catch (IndexOutOfRangeException)
+                        {
+                            rangeCheck = true;
+                            if (msgBoxes) System.Windows.MessageBox.Show(debugName + "fileAddTasks IndexOutOfRangeException");
+                            break;
+                        }
+
+                    }
+                    for (int i = 0; i < burnQueueTasks.Count; i++)
+                    {
+                        try
+                        {
+                            if (i < burnQueueTasks.Count && burnQueueTasks[i].IsCompleted)
+                            {
+                                burnQueueTasks.RemoveAt(i);
+                                i = -1;
+                            }
+                            else if (i > burnQueueTasks.Count)
+                            {
+                                rangeCheck = true;
+                                if (msgBoxes) System.Windows.MessageBox.Show(debugName + "i > burnQueueTasks.count");
+                                break;
+                            }
+                        }
+                        catch (IndexOutOfRangeException)
+                        {
+                            rangeCheck = true;
+                            if (msgBoxes) System.Windows.MessageBox.Show(debugName + "burnQueueTasks IndexOutOFRangeException");
+                            break;
+                        }
+                    }
                 }
-            }
+                while ((getPendingTasks() == 0 && fileAddTasks.Count > 0 || burnQueueTasks.Count > 0) || rangeCheck == true);
+            });
+
+            if (debug) debugEcho(debugName + "Finish");
         }
 
         //Pass a full path to a file and get back just the directory it's in

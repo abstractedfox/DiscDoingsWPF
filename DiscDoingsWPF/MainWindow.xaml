@@ -68,6 +68,11 @@
                                 Click="OpenFilePicker"
                                 HorizontalAlignment="Center"/>
 
+                        <Button Content="Add a Directory!"
+                                Margin="0,10,0,0"
+                                Click="OpenFolderPicker"
+                                HorizontalAlignment="Center"/>
+
                         <Button Content="Audit All Files!" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
@@ -78,7 +83,7 @@
                             Margin="0,10,0,0"
                             Click="openDebugWindow"/>
 
-                        <Button Content="Mixed use button" 
+                        <Button Content="Mystery button" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
                             Click="MixedUseButton"/>

@@ -29,7 +29,7 @@ namespace DiscDoingsWPF
         //the HashTypeUsed field to BurnPoolManager, the createHashMD5 function, and this field indicating the format version.
         //Version 2: Added "timesBurned" field to OneBurn and remoived the "List<OneBurn> completedBurns" field
         //Version 3: Added "public errorCode fileStatus" to FileProps, to keep track of this file's standing relative to the example in the file system
-
+        //Version 4: Added "overrideErrorCode" to FileProps
 
         public enum hashTypes
         {
@@ -42,7 +42,10 @@ namespace DiscDoingsWPF
             FILES_EQUAL,
             FILE_NOT_FOUND_IN_FILESYSTEM,
             FILE_NOT_FOUND_IN_ARRAY,
-            CHECKSUMS_DIFFERENT
+            CHECKSUMS_DIFFERENT,
+            ONEBURN_AUDIT_FAILED,
+            SUCCESS,
+            FAILED
         }
 
         //the get; set; properties do a lot of stuff but in this case they're necessary for serialization
@@ -61,6 +64,7 @@ namespace DiscDoingsWPF
 
             public string lastModified { get; set; } //Last modified time from file system
             public bool isExtra { get; set; } //Set this flag to true if this file is intentionally meant to be burned to more than one disc
+            public bool overrideErrorCode { get; set; } //Override a bad error code and allow this file to be burned anyway
         }
 
         //Describes the contents that will go into one single burn
@@ -352,7 +356,7 @@ namespace DiscDoingsWPF
                 newFile.isExtra = false;
                 newFile.discsBurned = new List<String>();
                 newFile.fileStatus = errorCode.FILES_EQUAL;
-
+                newFile.overrideErrorCode = false;
 
                 string hashString = "";
                 byte[] hashtime = createHash(fInfo);
@@ -637,16 +641,31 @@ namespace DiscDoingsWPF
             return true;
         }
 
+        public static bool FilePropsEqual(FileProps a, FileProps b, bool ignoreChecksum)
+        {
+            if (a.fileName != b.fileName) return false;
+            if (a.originalPath != b.originalPath) return false;
+            if (a.lastModified != b.lastModified) return false;
+            if (a.size != b.size) return false;
+            if (a.timeAdded != b.timeAdded) return false;
+            if (!ignoreChecksum)
+            {
+                if (!byteArrayEqual(a.checksum, b.checksum)) return false;
+            }
+            return true;
+        }
+
         //Pass an index in allFiles. It will find the same file in the file system, calculate a fresh checksum of the file,
         //and return whether there is a match
         public errorCode compareChecksumToFileSystem(int allFilesIndex)
         {
-            const string debugName = "BurnPoolManager::compareChecksumToFileSystem():";
-            const bool debug = true;
+            const string debugName = "BurnPoolManager::compareChecksumToFileSystem():", friendlyName = debugName;
+            const bool debug = false, log = true;
             
 
             if (allFilesIndex < 0 || allFilesIndex > allFiles.Count)
             {
+                logOutput(friendlyName + "File was not found in this database.");
                 return errorCode.FILE_NOT_FOUND_IN_ARRAY;
             }
 
@@ -654,6 +673,8 @@ namespace DiscDoingsWPF
 
             if (!fInfo.Exists)
             {
+                logOutput(friendlyName + "The file \"" + allFiles[allFilesIndex].originalPath + "\" was not found in " +
+                    "its original location, or has been renamed.");
                 return errorCode.FILE_NOT_FOUND_IN_FILESYSTEM;
             }
 
@@ -663,9 +684,10 @@ namespace DiscDoingsWPF
 
             if (byteArrayEqual(checksum, allFiles[allFilesIndex].checksum))
             {
+                logOutput(friendlyName + "The file \"" + allFiles[allFilesIndex].originalPath + "\" appears to be OK.");
                 return errorCode.FILES_EQUAL;
             }
-
+            logOutput(friendlyName + "The file \"" + allFiles[allFilesIndex].originalPath + "\" does not match the checksum made when the file was added.");
             return errorCode.CHECKSUMS_DIFFERENT;
         }
 
@@ -695,11 +717,71 @@ namespace DiscDoingsWPF
 
             replacementFile.checksum = createHash(fInfo);
             replacementFile.fileStatus = errorCode.FILES_EQUAL;
-
             allFiles[allFilesIndex] = replacementFile;
+
+            replaceChecksum(allFilesIndex, replacementFile.checksum);
+            setErrorCode(allFilesIndex, errorCode.FILES_EQUAL);
+
             if (debug) echoDebug(debugName + "Complete");
             return true;
 
+        }
+
+        //Use this when changing the error code on a file to not only update the file, but update all examples of that
+        //file in the burn queue.
+        public bool setErrorCode(int allFilesIndex, errorCode codeToSet)
+        {
+            const string debugName = "BurnPoolManager::setErrorCode():";
+            const bool debug = false;
+
+            if (debug) echoDebug(debugName + "Start");
+
+            FileProps replacementFile = allFiles[allFilesIndex];
+            replacementFile.fileStatus = codeToSet;
+            allFiles[allFilesIndex] = replacementFile;
+
+            for (int i = 0; i < burnQueue.Count; i++)
+            {
+                for (int x = 0; x < burnQueue[i].files.Count; x++)
+                {
+                    //Ignore the checksum, as we may use this function to set error codes indicating inequal checksums
+                    if (FilePropsEqual(burnQueue[i].files[x], replacementFile, true) && burnQueue[i].timesBurned == 0)
+                    {
+                        burnQueue[i].files[x] = replacementFile;
+                    }
+                }
+            }
+
+            if (debug) echoDebug(debugName + "End");
+            return true;
+        }
+
+        //Replace the checksum in a file with the one passed. Also replaces the checksum in all examples of that file in the burn queue.
+        //This doesn't calculate a checksum; use recalculateChecksum() for that
+        public bool replaceChecksum(int allFilesIndex, byte[] newChecksum)
+        {
+            const string debugName = "BurnPoolManager::replaceChecksum():";
+            const bool debug = false;
+
+            if (debug) echoDebug(debugName + "Start");
+
+            FileProps replacementFile = allFiles[allFilesIndex];
+            replacementFile.checksum = newChecksum;
+            allFiles[allFilesIndex] = replacementFile;
+
+            for (int i = 0; i < burnQueue.Count; i++)
+            {
+                for (int x = 0; x < burnQueue[i].files.Count; x++)
+                {
+                    if (FilePropsEqual(burnQueue[i].files[x], replacementFile, true) && burnQueue[i].timesBurned == 0)
+                    {
+                        burnQueue[i].files[x] = replacementFile;
+                    }
+                }
+            }
+
+            if (debug) echoDebug(debugName + "End");
+            return true;
         }
 
                                             //Begin burn organizing related code
@@ -973,19 +1055,43 @@ namespace DiscDoingsWPF
         }
 
         //Once a OneBurn has been burned, this commits it to the burned discs list
-        public bool commitOneBurn(int burnQueueMember)
+        public errorCode commitOneBurn(int burnQueueMember, bool verifyFiles)
         {
-            const string debugName = "BurnPoolManager::commitOneBurn:";
+            const string debugName = "BurnPoolManager::commitOneBurn:", friendlyName = debugName;
             const bool debug = false;
 
             if (burnQueueMember > burnQueue.Count || burnQueueMember < 0){
                 echoDebug(debugName + "Index of " + burnQueueMember + " is out of range.");
-                return false;
+                return errorCode.FAILED;
             }
             if (burnQueue[burnQueueMember] == null)
             {
                 echoDebug(debugName + "burnQueue index " + burnQueueMember + " is null.");
-                return false;
+                return errorCode.FAILED;
+            }
+
+            if (verifyFiles)
+            {
+                bool foundFaults = false;
+                for (int i = 0; i < burnQueue[burnQueueMember].files.Count; i++)
+                {
+                    int fileInAllFiles = findFileByFullPath(burnQueue[burnQueueMember].files[i].originalPath);
+                    errorCode fileCheck = compareChecksumToFileSystem(fileInAllFiles);
+                    if (fileCheck != errorCode.FILES_EQUAL)
+                    {
+                        setErrorCode(fileInAllFiles, fileCheck);
+                        if (!allFiles[fileInAllFiles].overrideErrorCode)
+                        {
+                            foundFaults = true;
+                        }
+                        else
+                        {
+                            logOutput(friendlyName + "File \"" + allFiles[fileInAllFiles].originalPath + "\" returned an error code of " + fileCheck.ToString() + ", but the override flag is set to true, so it will be committed anyway.");                                
+                        }
+                    }
+                }
+                if (foundFaults) return errorCode.ONEBURN_AUDIT_FAILED;
+
             }
 
             for (int i = 0; i < burnQueue[burnQueueMember].files.Count; i++)
@@ -994,8 +1100,9 @@ namespace DiscDoingsWPF
             }
 
             burnQueue[burnQueueMember].timesBurned++;
-            return true;
+            return errorCode.SUCCESS;
         }
+
 
         //If this member in the burnQueue has been marked as burned, unmark it and remove that OneBurn from the 
         //discsBurned field of all FileProps in allFiles
@@ -1481,6 +1588,16 @@ namespace DiscDoingsWPF
         private void echoDebugA(string text)
         {
             if (mainWindow != null) mainWindow.debugEchoAsync(text);
+            else
+            {
+                throw new NullReferenceException("mainWindow in BurnPoolManager is null, debug output failed.");
+            }
+        }
+
+        private void logOutput(string text)
+        {
+            //Console.WriteLine(text);
+            if (mainWindow != null) mainWindow.logOutput(text);
             else
             {
                 throw new NullReferenceException("mainWindow in BurnPoolManager is null, debug output failed.");

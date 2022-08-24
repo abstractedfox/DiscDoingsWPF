@@ -89,5 +89,28 @@ namespace DiscDoingsWPF
 
             populateFields(memberInBurnQueue);
         }
+
+        private void OneBurnListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            const string debugName = "OneBurnViewDetails::OneBurnListBox_MouseDoubleClick():";
+            if (OneBurnListBox.SelectedItems.Count != 1)
+            {
+                return;
+            }
+
+            int? filePropsToGet = burnpoolref.findFileByFullPath(OneBurnListBox.SelectedItem.ToString());
+            if (filePropsToGet == null)
+            {
+                mainWindowReference.debugEcho(debugName + "Invalid selection");
+                return;
+            }
+
+            var fileViewDetails = new FilePropsViewDetails(ref burnpoolref, mainWindowReference, (int)filePropsToGet);
+            fileViewDetails.Owner = this;
+            fileViewDetails.Topmost = false;
+            //this.Name = "OneBurnViewDetails";
+
+            fileViewDetails.Show();
+        }
     }
 }
