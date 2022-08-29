@@ -83,10 +83,10 @@
                             Margin="0,10,0,0"
                             Click="openDebugWindow"/>
 
-                        <Button Content="Mystery button" 
+                        <!--<Button Content="Mystery button" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
-                            Click="MixedUseButton"/>
+                            Click="MixedUseButton"/> -->
 
 
                     </StackPanel>

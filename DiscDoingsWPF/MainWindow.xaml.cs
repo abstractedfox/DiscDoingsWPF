@@ -828,6 +828,8 @@ namespace DiscDoingsWPF
 
             //System.Windows.MessageBox.Show(fileAddTasks.Count.ToString());
 
+            
+
             await Task.Run(() => {
                 if (debugVerbose) debugEcho(debugName + "Starting folder task check loop");
                 
@@ -1142,6 +1144,7 @@ namespace DiscDoingsWPF
                     {
                         try
                         {
+                            if (fileAddTasks[i] == null) break;
                             if (i < fileAddTasks.Count && fileAddTasks[i].IsCompleted)
                             {
                                 fileAddTasks.RemoveAt(i);
@@ -1162,10 +1165,12 @@ namespace DiscDoingsWPF
                         }
 
                     }
+
                     for (int i = 0; i < burnQueueTasks.Count; i++)
                     {
                         try
                         {
+                            if (burnQueueTasks[i] == null) break;
                             if (i < burnQueueTasks.Count && burnQueueTasks[i].IsCompleted)
                             {
                                 burnQueueTasks.RemoveAt(i);
@@ -1185,8 +1190,34 @@ namespace DiscDoingsWPF
                             break;
                         }
                     }
+
+                    for (int i = 0; i < folderAddTasks.Count; i++)
+                    {
+                        try
+                        {
+                            if (folderAddTasks[i] == null) break;
+                            if (i < folderAddTasks.Count && folderAddTasks[i].IsCompleted)
+                            {
+                                folderAddTasks.RemoveAt(i);
+                                i = -1;
+                            }
+                            else if (i > folderAddTasks.Count)
+                            {
+                                rangeCheck = true;
+                                if (msgBoxes) System.Windows.MessageBox.Show(debugName + "i > folderAddTasks.count");
+                                break;
+                            }
+                        }
+                        catch (IndexOutOfRangeException)
+                        {
+                            rangeCheck = true;
+                            if (msgBoxes) System.Windows.MessageBox.Show(debugName + "folderAddTasks IndexOutOfRangeException");
+                            break;
+                        }
+
+                    }
                 }
-                while ((getPendingTasks() == 0 && fileAddTasks.Count > 0 || burnQueueTasks.Count > 0) || rangeCheck == true);
+                while ((getPendingTasks() == 0 && fileAddTasks.Count > 0 || burnQueueTasks.Count > 0 || folderAddTasks.Count > 0) || rangeCheck == true);
             });
 
             if (debug) debugEcho(debugName + "Finish");
