@@ -31,6 +31,9 @@ namespace DiscDoingsWPF
         //Version 3: Added "public errorCode fileStatus" to FileProps, to keep track of this file's standing relative to the example in the file system
         //Version 4: Added "overrideErrorCode" to FileProps
 
+
+        
+
         public enum hashTypes
         {
             MD5,
@@ -76,8 +79,7 @@ namespace DiscDoingsWPF
             public List<FileProps> files { get; set; } //Files to be burned. Do not alter this directly!
             public string name { get; set; }
             public int timesBurned { get; set; } //The number of times this OneBurn has been burned to a physical disc
-            
-            
+
 
             public OneBurn(long fileSizeBytes)
             {
@@ -188,6 +190,29 @@ namespace DiscDoingsWPF
                 return -1;
             }
 
+            new public string ToString()
+            {
+                const string debugName = "BurnPoolManager::OneBurn::formatToString():";
+                const string OneBurnExportHeader = "#OneBurnName\n\n";
+                const string OneBurnExportFormatting = "#FileName\n#OriginalPath\nSize:#SizeInBytes\nMD5 Checksum:#Checksum\nAdded to this burn on:#TimeAdded\nLast modified on:#LastModified\n\n";
+
+                string results = OneBurnExportHeader.Replace("#OneBurnName", this.name);
+
+                for (int i = 0; i < this.files.Count; i++)
+                {
+                    string oneFile = OneBurnExportFormatting;
+                    oneFile = oneFile.Replace("#FileName", this.files[i].fileName);
+                    oneFile = oneFile.Replace("#OriginalPath", this.files[i].originalPath);
+                    oneFile = oneFile.Replace("#SizeInBytes", this.files[i].size.ToString());
+                    oneFile = oneFile.Replace("#Checksum", BurnPoolManager.checksumToString(this.files[i].checksum));
+                    oneFile = oneFile.Replace("#TimeAdded", this.files[i].timeAdded);
+                    oneFile = oneFile.Replace("#LastModified", this.files[i].lastModified);
+                    results += oneFile;
+                }
+
+                return results;
+            }
+
             public void print()
             {
                 Console.WriteLine("Printing contents of " + name);
@@ -230,7 +255,7 @@ namespace DiscDoingsWPF
         {
             const string debugName = "BurnPoolManager(BurnPoolManager copySource) (copy function):";
             //this.allFiles = copySource.allFiles;
-
+            
             if (copySource.allFiles == null) this.allFiles = new List<FileProps>();
             else
             {
@@ -491,31 +516,44 @@ namespace DiscDoingsWPF
         //The calling function should make any compensations for that on its own!
         public bool deleteOneBurn(int oneBurnIndex)
         {
-            const string debugName = "BurnPoolManager::deleteOneBurn:";
+            const string debugName = "BurnPoolManager::deleteOneBurn:", friendlyName = debugName;
             const bool debug = false;
 
-
+            
             if (oneBurnIndex > burnQueue.Count || oneBurnIndex < 0)
             {
                 echoDebug(debugName + "Invalid OneBurn index.");
                 return false;
             }
 
+            if (debug) echoDebug(debugName + "Start. Number of files to remove: " + burnQueue[oneBurnIndex].files.Count);
+
 
             FileProps temphold = new FileProps();
             for (int i = 0; i < burnQueue[oneBurnIndex].files.Count; i++)
             {
+                //if (debug) echoDebug(debugName + " i = " + i);
                 temphold = burnQueue[oneBurnIndex].files[i];
+
+                /*
                 if (!burnQueue[oneBurnIndex].removeFile(i))
                 {
                     echoDebug(debugName + "Removal of file index " + i + " of burnQueue index " + oneBurnIndex + " failed." +
                         " Halting removal of OneBurn.");
                     return false;
                 }
-                if (!existsInBurnQueue(temphold))
+                
+
+
+                if (existsInBurnQueue(temphold))
                 {
-                    allFilesNotInBurnQueue.Add(temphold);
+                    logOutput(friendlyName + "There appear to be duplicate examples of the file " + temphold.originalPath +
+                        "in this library. There may be data integrity errors.");
                 }
+*/
+                //if (debug) echoDebug(debugName + "Adding file of index " + i);
+                allFilesNotInBurnQueue.Add(temphold);
+                
 
                 int indexInMainList = findFileByFullPath(temphold.originalPath);
                 for (int x = 0; x < allFiles[indexInMainList].discsBurned.Count; x++)
@@ -527,9 +565,9 @@ namespace DiscDoingsWPF
                 }
             }
 
+            burnQueue.RemoveAt(oneBurnIndex);
             sortFilesBySize();
 
-            burnQueue.RemoveAt(oneBurnIndex);
             return true;
         }
 
@@ -691,6 +729,16 @@ namespace DiscDoingsWPF
             return errorCode.CHECKSUMS_DIFFERENT;
         }
 
+        public static string checksumToString(byte[] checksum)
+        {
+            string result = "";
+            for (int i = 0; i < checksum.Length; i++)
+            {
+                result += checksum[i].ToString();
+            }
+            return result;
+        }
+
         //Recalculate the checksum for a file based off the example in the file system. Returns false if there is an error.
         public bool recalculateChecksum(int allFilesIndex)
         {
@@ -833,12 +881,12 @@ namespace DiscDoingsWPF
         //Generate a OneBurn and add it to the queue. Returns false if a OneBurn can't be generated.
         public bool generateOneBurn(long sizeInBytes)
         {
-            const bool verbose = false;
+            const bool verbose = false, debug = true;
             const string debugName = "generateOneBurn:";
             OneBurn aBurn = new OneBurn(sizeInBytes);
             aBurn.setName(thisPool + (burnQueue.Count));
 
-            if (verbose) echoDebug(debugName + "Start");
+            if (debug || verbose) echoDebug(debugName + "Start. Total files in allFilesNotInBurnQueue: " + allFilesNotInBurnQueue.Count);
 
             sortFilesBySize();
 

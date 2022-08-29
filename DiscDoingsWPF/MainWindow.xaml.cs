@@ -40,14 +40,20 @@ namespace DiscDoingsWPF
         public int index;
     }
 
-    
+    struct localConfig
+    {
+
+    }
 
     public partial class MainWindow : Window
     {
         string debugText = "Debug Output\n"; //Append any debug related messages to this string
         bool debugWindowOpen = false;
-        List<Task> fileAddTasks, burnQueueTasks;
-        
+        List<Task> fileAddTasks, burnQueueTasks, folderAddTasks;
+        int tasklimit = 10;
+
+        string tempBurnFolder = "C:\\Users\\#UserName\\AppData\\Local\\Microsoft\\Windows\\Burn\\Burn1\\";
+
         public BurnPoolManager burnpool;
         private BurnPoolManager lastSavedInstance; //Use to keep track of whether changes have been made
 
@@ -56,6 +62,15 @@ namespace DiscDoingsWPF
         {
             DISC_ALREADY_BURNED,
             FILE_AUDIT_FAILED
+        }
+
+        public enum errorCode
+        {
+            SUCCESS,
+            SUCCESS_WITH_WARNINGS,
+            DIRECTORY_NOT_FOUND,
+            FILE_NOT_FOUND,
+            UNKNOWN_ERROR
         }
 
         //public int filesInChecksumQueue; //Keep track of how many files are waiting for checksum calculations
@@ -68,6 +83,7 @@ namespace DiscDoingsWPF
             InitializeComponent();
             fileAddTasks = new List<Task>();
             burnQueueTasks = new List<Task>();
+            folderAddTasks = new List<Task>();
             
             startBurnPool();
 
@@ -112,7 +128,8 @@ namespace DiscDoingsWPF
             while (true)
             {
                 debugWindow.DebugOutputTextBox.Text = debugText;
-                await Task.Delay(1000);
+                debugWindow.DebugOutputTaskCounter.Content = "Tasks: " + getPendingTasks();
+                await Task.Delay(500);
             }
             
         }
@@ -348,6 +365,9 @@ namespace DiscDoingsWPF
         {
             const string debugName = "MainWindow::BurnViewListBox_MouseDoubleClick():";
             int? oneBurnToGet = 0;
+
+            if (BurnViewListBox.SelectedItems.Count == 0) return;
+
             try
             {
                 oneBurnToGet = burnpool.getBurnQueueFileByName(BurnViewListBox.SelectedItem.ToString());
@@ -433,6 +453,103 @@ namespace DiscDoingsWPF
                 operationsInProgressDialog();
             }
 
+        }
+
+
+        //Button handler to stage a burn
+        private void StageThisBurnButtonClick(object sender, RoutedEventArgs e)
+        {
+            const string debugName = "MainWindow::StageThisBurnButtonClick():";
+            int temp = 0;
+            errorCode a = StageABurn(0, true);
+            debugEcho(debugName + "Result: " + a.ToString());
+        }
+
+        //Stage the contents of a OneBurn into the windows burn directory
+        //includeBurnRecord = include a text document of this OneBurn's files and checksums
+        private errorCode StageABurn(int burnQueueIndex, bool includeBurnRecord)
+        {
+            const string debugName = "MainWindow::StageABurn():", friendlyName = debugName;
+            const bool debug = false;
+
+            string userName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
+            userName = userName.Substring(userName.IndexOf("\\") + 1);
+            tempBurnFolder = tempBurnFolder.Replace("#UserName", userName);
+
+            if (!Directory.Exists(tempBurnFolder))
+            {
+                return errorCode.DIRECTORY_NOT_FOUND;
+            }
+
+            if (includeBurnRecord)
+            {
+                if (debug) debugEcho(debugName + "Including burn record");
+                string burnRecord = burnpool.burnQueue[burnQueueIndex].ToString();
+                FileInfo newFile = new FileInfo(tempBurnFolder + "File Catalog.txt");
+
+                if (debug) debugEcho(debugName + "Space remaining in OneBurn:" + burnpool.burnQueue[burnQueueIndex].spaceRemaining +
+                    "\nSpace occupied by file output:" + System.Text.ASCIIEncoding.Unicode.GetByteCount(burnRecord));
+
+                while (System.Text.ASCIIEncoding.Unicode.GetByteCount(burnRecord) > burnpool.burnQueue[burnQueueIndex].spaceRemaining)
+                {
+                    if (debug) debugEcho(debugName + "Removing file " + burnpool.burnQueue[burnQueueIndex].files[burnpool.burnQueue[burnQueueIndex].files.Count - 1].fileName +
+                        " with the size " + burnpool.burnQueue[burnQueueIndex].files[burnpool.burnQueue[burnQueueIndex].files.Count - 1].size +
+                        " to make space for the output of size " + System.Text.ASCIIEncoding.Unicode.GetByteCount(burnRecord));
+
+
+                    burnpool.removeFileFromOneBurn(burnQueueIndex, burnpool.burnQueue[burnQueueIndex].files.Count - 1);
+                    burnRecord = burnpool.burnQueue[burnQueueIndex].ToString();
+
+                }
+
+                using (StreamWriter streamtime = newFile.CreateText())
+                {
+                    streamtime.WriteLine(burnRecord);
+                }
+            }
+
+            List<FileInfo> filesToCopy = new List<FileInfo>();
+            bool foundErrors = false;
+            for (int i = 0; i < burnpool.burnQueue[burnQueueIndex].files.Count; i++)
+            {
+                FileInfo newFile = new FileInfo(burnpool.burnQueue[burnQueueIndex].files[i].originalPath);
+                if (!newFile.Exists)
+                {
+                    burnpool.setErrorCode(burnpool.findFileByFullPath(burnpool.burnQueue[burnQueueIndex].files[i].originalPath), BurnPoolManager.errorCode.FILE_NOT_FOUND_IN_FILESYSTEM);
+                    foundErrors = true;
+                }
+                else
+                {
+                    filesToCopy.Add(newFile);
+                }
+            }
+
+            if (foundErrors)
+            {
+                return errorCode.FILE_NOT_FOUND;
+            }
+            else
+            {
+                
+
+                for (int i = 0; i < filesToCopy.Count; i++)
+                {
+                    string copyName = tempBurnFolder + filesToCopy[i].Name;
+                    try
+                    {
+                        filesToCopy[i].CopyTo(copyName, false);
+                    }
+                    catch(Exception e)
+                    {
+                        informUser(friendlyName + "Exception \"" + e + "\" was thrown when copying " + filesToCopy[i].FullName + 
+                            " to the temporary burn path at " + tempBurnFolder);
+                        return errorCode.UNKNOWN_ERROR;
+                    }
+                }
+            }
+
+            
+            return errorCode.SUCCESS;
         }
 
 
@@ -634,7 +751,7 @@ namespace DiscDoingsWPF
                     }
                 }
             
-
+                /*
                 int tasksInProgress = 0, lastTasksInProgress = 0;
                 do
                 {
@@ -656,7 +773,8 @@ namespace DiscDoingsWPF
                     //StatusField.Content = (debugName + "Tasks in progress: " + tasksInProgress);
 
                 }
-                while (tasksInProgress > 0);
+                while (tasksInProgress > 0 || false);
+                */
             });
 
             if (debugVerbose)
@@ -706,17 +824,17 @@ namespace DiscDoingsWPF
 
             if (debugVerbose) debugEcho(debugName + "Adding folder " + theFolder.Name);
             IReadOnlyList<IStorageItem> foldercontents = await theFolder.GetItemsAsync();
-            fileAddTasks.Add(addFolderRecursive(foldercontents, true));
+            folderAddTasks.Add(addFolderRecursive(foldercontents, true));
 
             //System.Windows.MessageBox.Show(fileAddTasks.Count.ToString());
 
             await Task.Run(() => {
                 if (debugVerbose) debugEcho(debugName + "Starting folder task check loop");
                 
-                //addFolderRecursive(theFolder);
-
+                /*
                 int tasksInProgress = 0, lastTasksInProgress = 0;
                 bool nullcatch = false;
+                
                 do
                 {
                     tasksInProgress = 0;
@@ -759,6 +877,7 @@ namespace DiscDoingsWPF
 
                 }
                 while (tasksInProgress > 0 || nullcatch == true);
+                */
 
                 if (debugVerbose) debugEcho(debugName + "Ending folder task check loop");
             });
@@ -777,29 +896,32 @@ namespace DiscDoingsWPF
 
         }
 
-        private Task addFolderRecursive(IReadOnlyList<IStorageItem> foldercontents, bool recursion)
+        private async Task<Task> addFolderRecursive(IReadOnlyList<IStorageItem> foldercontents, bool recursion)
         {
             const string debugName = "MainWindow::addFolderRecursive():", friendlyName = debugName;
             const bool debugVerbose = true;
+            
             //IReadOnlyList<IStorageItem> foldercontents = await theFolder.GetItemsAsync();
 
             List<StorageFile> files = new List<StorageFile>();
             List<StorageFolder> folders = new List<StorageFolder>();
 
-            foreach (IStorageItem item in foldercontents)
-            {
-                //if (debugVerbose) debugEcho("BLORF");
-                if (item.IsOfType(StorageItemTypes.File))
-                {
-                    files.Add((StorageFile)item);
-                }
-                if (item.IsOfType(StorageItemTypes.Folder) && recursion)
-                {
-                    startNewFolderTask((StorageFolder)item);
-                }
-            }
 
-
+            await Task.Run(() => { 
+                foreach (IStorageItem item in foldercontents)
+                {
+                    //if (debugVerbose) debugEcho("BLORF");
+                    if (item.IsOfType(StorageItemTypes.File))
+                    {
+                        files.Add((StorageFile)item);
+                    }
+                    if (item.IsOfType(StorageItemTypes.Folder) && recursion)
+                    {
+                        //while (getPendingTasks() > taskLimit) await Task.Delay(1000);
+                        startNewFolderTask((StorageFolder)item);
+                    }
+                }
+            });
 
             //IReadOnlyList<StorageFile> files = (IReadOnlyList<StorageFile>)await theFolder.GetItemsAsync();
 
@@ -813,7 +935,7 @@ namespace DiscDoingsWPF
 
             return Task.Run(() => {
                 //int filesPrior = burnpool.allFiles.Count;
-                List<BurnPoolManager.FileProps> newFileBuffer = new List<BurnPoolManager.FileProps>();
+                //List<BurnPoolManager.FileProps> newFileBuffer = new List<BurnPoolManager.FileProps>();
 
                 foreach (StorageFile file in files)
                 {
@@ -837,6 +959,8 @@ namespace DiscDoingsWPF
 
         private async void startNewFolderTask(StorageFolder folder)
         {
+            
+            //while (getPendingTasks() > tasklimit) await Task.Delay(1000);
             IReadOnlyList<IStorageItem> newfolder = await folder.GetItemsAsync();
             fileAddTasks.Add(addFolderRecursive(newfolder, true));
         }
@@ -939,16 +1063,45 @@ namespace DiscDoingsWPF
             updateAllWindows();
         }
 
+        //Null catches are in case the task list changes in size when this is running
         private int getPendingTasks()
         {
             int tasks = 0;
             for (int i = 0; i < fileAddTasks.Count; i++)
             {
-                if (!fileAddTasks[i].IsCompleted) tasks++;
+                try
+                {
+                    if (fileAddTasks[i] == null) break;
+                    if (!fileAddTasks[i].IsCompleted) tasks++;
+                }
+                catch (NullReferenceException)
+                {
+                    break;
+                }
             }
             for (int i = 0; i < burnQueueTasks.Count; i++)
             {
-                if (!burnQueueTasks[i].IsCompleted) tasks++;
+                try
+                {
+                    if (burnQueueTasks[i] == null) break;
+                    if (!burnQueueTasks[i].IsCompleted) tasks++;
+                }
+                catch (NullReferenceException)
+                {
+                    break;
+                }
+            }
+            for (int i = 0; i < folderAddTasks.Count; i++)
+            {
+                try
+                {
+                    if (folderAddTasks[i] == null) break;
+                    if (!folderAddTasks[i].IsCompleted) tasks++;
+                }
+                catch
+                {
+                    break;
+                }
             }
             return tasks;
         }
@@ -1075,7 +1228,6 @@ namespace DiscDoingsWPF
             try
             {
                 serialized = JsonSerializer.Serialize(burnpool);
-                //debugEcho("SQUEEBY\n" + serialized);
             }
             catch
             {
@@ -1177,8 +1329,9 @@ namespace DiscDoingsWPF
 
         private void MixedUseButton(object sender, RoutedEventArgs e)
         {
-            //System.Windows.MessageBox.Show(getDirectoryFromPath("C:\\BALLS\\dick\\ hellloi peesnis \\BALLER.jpg"));
-            burnpool.recalculateChecksum(0);
+            //debugEcho(burnpool.burnQueue[0].ToString());
+            updateAllWindowsWhenTasksComplete();
+            cleanUpTaskLists();
         }
 
         private async void FileOpen_Click(object sender, RoutedEventArgs e)

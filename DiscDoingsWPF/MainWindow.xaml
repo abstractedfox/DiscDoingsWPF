@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DiscDoingsWPF"
         mc:Ignorable="d"
-        Title="MainWindow" Height="896" Width="800"
+        Title="MainWindow" Height="700" Width="800"
         x:Name="TheMainWindow">
     
     
@@ -108,21 +108,32 @@
                                Margin="0,0,0,0"/>
                         <TextBox
                         x:Name="VolumeSizeTextInput"
-                        TextChanged="VolumeSizeTextInput_TextChanged"/>
+                        TextChanged="VolumeSizeTextInput_TextChanged">
+                        24220008448
+                        </TextBox>
+
+                            <Button
+                        Margin="0,15,0,0"
+                        Click="CalculateBurnListButtonClick">
+                            1: Generate individual burns
+                        </Button>
 
                         <Button
                         Margin="0,15,0,0"
-                        Click="CalculateBurnListButtonClick">Calculate burn lists from files</Button>
+                        Click="StageThisBurnButtonClick">
+                            2: Stage this burn
+                        </Button>
 
                         <Button
                         Margin="0,15,0,0"
                         Click="MarkBurnedButtonClick">
-                            Mark this as burned
+                            3: Mark this as burned
                         </Button>
                         
                         <Button
                         Margin="0,15,0,0"
-                        Click="RemoveBurnButtonClick">
+                        Click="RemoveBurnButtonClick"
+                            Background="Tomato">
                             Remove this burn
                         </Button>
 
