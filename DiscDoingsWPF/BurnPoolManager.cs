@@ -31,7 +31,7 @@ namespace DiscDoingsWPF
         //Version 3: Added "public errorCode fileStatus" to FileProps, to keep track of this file's standing relative to the example in the file system
         //Version 4: Added "overrideErrorCode" to FileProps
 
-
+        [NonSerialized()] public bool tasksPendingFlag;
         
 
         public enum hashTypes
@@ -48,7 +48,8 @@ namespace DiscDoingsWPF
             CHECKSUMS_DIFFERENT,
             ONEBURN_AUDIT_FAILED,
             SUCCESS,
-            FAILED
+            FAILED,
+            CANCELED
         }
 
         //the get; set; properties do a lot of stuff but in this case they're necessary for serialization
@@ -153,8 +154,6 @@ namespace DiscDoingsWPF
 
                 for (int i = 0; i < files.Count - 1; i++)
                 {
-                    //Console.WriteLine(i + " About to compare " + allFiles[i].fileName + " " + allFiles[i].size + " to " +
-                    //allFiles[i + 1].fileName + " " + allFiles[i + 1].size);
                     if (files[i + 1].size > files[i].size)
                     {
                         temphold = files[i];
@@ -234,6 +233,7 @@ namespace DiscDoingsWPF
             lastError = "";
             hashTypeUsed = hashTypes.MD5;
             mainWindow = null;
+            tasksPendingFlag = false;
         }
 
         public BurnPoolManager(MainWindow programMainWindow)
@@ -246,6 +246,7 @@ namespace DiscDoingsWPF
             lastError = "";
             hashTypeUsed = hashTypes.MD5;
             mainWindow = programMainWindow;
+            tasksPendingFlag = false;
         }
 
 
@@ -287,18 +288,6 @@ namespace DiscDoingsWPF
                 }
             }
 
-            //this.completedBurns = copySource.completedBurns;
-            /*
-            if (copySource.completedBurns == null) this.completedBurns = new List<OneBurn>();
-            else
-            {
-                this.completedBurns = new List<OneBurn>();
-                for (int i = 0; i < copySource.completedBurns.Count; i++)
-                {
-                    this.completedBurns.Add(copySource.completedBurns[i]);
-                }
-            }
-            */
 
             if (copySource.hashTypeUsed == null)
             {
@@ -314,6 +303,7 @@ namespace DiscDoingsWPF
             this.thisPool = copySource.thisPool;
             this.lastError = copySource.lastError;
             this.mainWindow = copySource.mainWindow;
+            this.tasksPendingFlag = false;
         }
         
 
@@ -403,7 +393,6 @@ namespace DiscDoingsWPF
 
                 allFiles.Add(newFile);
                 allFilesNotInBurnQueue.Add(newFile);
-                //mainWindow.filesInChecksumQueue--;
             });
 
         }
@@ -457,7 +446,6 @@ namespace DiscDoingsWPF
             if (debug)
             {
                 echoDebug(debugName + "Starting with burnQueue: " + oneBurnIndex + " fileIndex: " + fileIndex);
-                //System.Windows.MessageBox.Show(debugName + "Starting with burnQueue: " + oneBurnIndex + " fileIndex: " + fileIndex);
             }
 
             FileProps fileToRemove = burnQueue[oneBurnIndex].files[fileIndex];
@@ -532,26 +520,8 @@ namespace DiscDoingsWPF
             FileProps temphold = new FileProps();
             for (int i = 0; i < burnQueue[oneBurnIndex].files.Count; i++)
             {
-                //if (debug) echoDebug(debugName + " i = " + i);
                 temphold = burnQueue[oneBurnIndex].files[i];
 
-                /*
-                if (!burnQueue[oneBurnIndex].removeFile(i))
-                {
-                    echoDebug(debugName + "Removal of file index " + i + " of burnQueue index " + oneBurnIndex + " failed." +
-                        " Halting removal of OneBurn.");
-                    return false;
-                }
-                
-
-
-                if (existsInBurnQueue(temphold))
-                {
-                    logOutput(friendlyName + "There appear to be duplicate examples of the file " + temphold.originalPath +
-                        "in this library. There may be data integrity errors.");
-                }
-*/
-                //if (debug) echoDebug(debugName + "Adding file of index " + i);
                 allFilesNotInBurnQueue.Add(temphold);
                 
 
@@ -703,7 +673,7 @@ namespace DiscDoingsWPF
 
             if (allFilesIndex < 0 || allFilesIndex > allFiles.Count)
             {
-                logOutput(friendlyName + "File was not found in this database.");
+                logOutput(friendlyName + "File at index " + allFilesIndex + " was not found in this database with a range of " + allFiles.Count);
                 return errorCode.FILE_NOT_FOUND_IN_ARRAY;
             }
 
@@ -722,7 +692,7 @@ namespace DiscDoingsWPF
 
             if (byteArrayEqual(checksum, allFiles[allFilesIndex].checksum))
             {
-                logOutput(friendlyName + "The file \"" + allFiles[allFilesIndex].originalPath + "\" appears to be OK.");
+                if (debug) echoDebug(friendlyName + "The file \"" + allFiles[allFilesIndex].originalPath + "\" appears to be OK.");
                 return errorCode.FILES_EQUAL;
             }
             logOutput(friendlyName + "The file \"" + allFiles[allFilesIndex].originalPath + "\" does not match the checksum made when the file was added.");
@@ -780,9 +750,14 @@ namespace DiscDoingsWPF
         public bool setErrorCode(int allFilesIndex, errorCode codeToSet)
         {
             const string debugName = "BurnPoolManager::setErrorCode():";
-            const bool debug = false;
+            const bool debug = false, logging = true;
 
             if (debug) echoDebug(debugName + "Start");
+            if (allFilesIndex > allFiles.Count || allFilesIndex < 0)
+            {
+                echoDebug(debugName + "Index of " + allFilesIndex + " is out of the range of " + allFiles.Count);
+                return false;
+            }
 
             FileProps replacementFile = allFiles[allFilesIndex];
             replacementFile.fileStatus = codeToSet;
@@ -875,13 +850,11 @@ namespace DiscDoingsWPF
             return combinedLists;
         }
 
-        //this one!
-        //nevermind not this one
 
         //Generate a OneBurn and add it to the queue. Returns false if a OneBurn can't be generated.
         public bool generateOneBurn(long sizeInBytes)
         {
-            const bool verbose = false, debug = true;
+            const bool verbose = false, debug = false;
             const string debugName = "generateOneBurn:";
             OneBurn aBurn = new OneBurn(sizeInBytes);
             aBurn.setName(thisPool + (burnQueue.Count));
@@ -891,19 +864,6 @@ namespace DiscDoingsWPF
             sortFilesBySize();
 
             if (verbose) echoDebug(debugName + "Files sorted by size");
-
-            /*
-             * Old version of this that needs to be updated to work properly with allFilesNotInBurnQueue
-            for (int i = 0; i < allFiles.Count; i++) //Start with the biggest file that will fit
-            {
-                if (aBurn.canAddFile(allFiles[i]) && !existsInBurnQueue(allFiles[i]))
-                {
-                    aBurn.addFile(allFiles[i]);
-
-                    break;
-                }
-            }
-            */
 
             for (int i = 0; i < allFilesNotInBurnQueue.Count; i++) //Start with the biggest file that will fit
             {
@@ -1017,8 +977,7 @@ namespace DiscDoingsWPF
                     iterations++;
                     //if (iterations % 5000 == 0) echoDebug(iterations.ToString() + " " + restarts.ToString());
                 }
-                //Console.WriteLine(i + " About to compare " + allFiles[i].fileName + " " + allFiles[i].size + " to " +
-                    //allFiles[i + 1].fileName + " " + allFiles[i + 1].size);
+
                 if(allFiles[i + 1].size > allFiles[i].size)
                 {
                     if (debug)
@@ -1118,18 +1077,49 @@ namespace DiscDoingsWPF
                 return errorCode.FAILED;
             }
 
+            int verifyCount = burnQueue[burnQueueMember].files.Count;
             if (verifyFiles)
             {
+
                 bool foundFaults = false;
-                for (int i = 0; i < burnQueue[burnQueueMember].files.Count; i++)
+                for (int i = 0; i < verifyCount; i++)
                 {
+                    if (tasksPendingFlag)
+                    {
+                        echoDebug(debugName + "Operation canceled by tasks in progress. Please wait for tasks to complete.");
+                        return errorCode.CANCELED;
+                    }
+
+                    if (verifyCount != burnQueue[burnQueueMember].files.Count)
+                    {
+                        echoDebug(debugName + "The file count of burnQueue[" + burnQueueMember + "] named \"" + burnQueue[burnQueueMember]
+                            + " initiated at " + verifyCount + " and has changed to " + burnQueue[burnQueueMember].files.Count + ". Aborting operation.");
+                        return errorCode.FAILED;
+                    }
+                    if (burnQueueMember > burnQueue.Count)
+                    {
+                        echoDebug(debugName + "The passed burn queue member value of " + burnQueueMember + " now exceeds the burnQueue size of " + burnQueue.Count +
+                            ". Aborting operation.");
+                        return errorCode.FAILED;
+                    }
+
                     int fileInAllFiles = findFileByFullPath(burnQueue[burnQueueMember].files[i].originalPath);
                     errorCode fileCheck = compareChecksumToFileSystem(fileInAllFiles);
                     if (fileCheck != errorCode.FILES_EQUAL)
                     {
-                        setErrorCode(fileInAllFiles, fileCheck);
+                        if (!setErrorCode(fileInAllFiles, fileCheck))
+                        {
+                            echoDebug(debugName + "setErrorCode returned a value of false.");
+                            return errorCode.FAILED;
+                        }
+                        if (fileInAllFiles > allFiles.Count || fileInAllFiles < 0)
+                        {
+                            echoDebug(debugName + "The index of " + fileInAllFiles + " is no longer valid in allFiles, which has a range of " + allFiles.Count);
+                        }
+
                         if (!allFiles[fileInAllFiles].overrideErrorCode)
                         {
+                            logOutput(friendlyName + "File \"" + allFiles[fileInAllFiles].originalPath + "\" returned an error code of " + fileCheck.ToString());
                             foundFaults = true;
                         }
                         else
@@ -1154,7 +1144,7 @@ namespace DiscDoingsWPF
 
         //If this member in the burnQueue has been marked as burned, unmark it and remove that OneBurn from the 
         //discsBurned field of all FileProps in allFiles
-        public bool uncommitOneBurn(int burnQueueMember)
+        public errorCode uncommitOneBurn(int burnQueueMember)
         {
             const string debugName = "BurnPoolManager::uncommitOneBurn():";
             const bool debug = false;
@@ -1162,22 +1152,27 @@ namespace DiscDoingsWPF
             if (burnQueueMember > burnQueue.Count || burnQueueMember < 0)
             {
                 echoDebug(debugName + "Index of " + burnQueueMember + " is out of range.");
-                return false;
+                return errorCode.FAILED;
             }
             if (burnQueue[burnQueueMember] == null)
             {
                 echoDebug(debugName + "burnQueue index " + burnQueueMember + " is null.");
-                return false;
+                return errorCode.FAILED;
             }
 
             if (burnQueue[burnQueueMember].timesBurned == 0)
             {
                 echoDebug("burnQueue[" + burnQueueMember + "] has not been committed to a disc.");
-                return false;
+                return errorCode.FAILED;
             }
 
             for (int i = 0; i < burnQueue[burnQueueMember].files.Count; i++)
             {
+                if (tasksPendingFlag)
+                {
+                    echoDebug(debugName + "Operation canceled by tasks in progress. Please wait for tasks to complete.");
+                    return errorCode.CANCELED;
+                }
                 int locationInAllFiles = findFileByFullPath(burnQueue[burnQueueMember].files[i].originalPath);
 
                 if (locationInAllFiles == -1)
@@ -1185,7 +1180,7 @@ namespace DiscDoingsWPF
                     echoDebug(debugName + "The file \"" + burnQueue[burnQueueMember].files[i].originalPath + "\" was not found in " +
                         "allFiles. This may indicate corruption or that data was mishandled during file deletion or creation of " +
                         "this OneBurn.");
-                    return false;
+                    return errorCode.FAILED;
                 }
 
                 int thisBurnInFile = allFiles[locationInAllFiles].discsBurned.IndexOf(burnQueue[burnQueueMember].name);
@@ -1198,12 +1193,12 @@ namespace DiscDoingsWPF
                     echoDebug(debugName + "The OneBurn titled \"" + burnQueue[burnQueueMember].name + "\" at burnQueue index " +
                         burnQueueMember + " did not appear in the file \"" + allFiles[locationInAllFiles].originalPath +
                         "\". This may indicate corruption in the struct or an error in how this OneBurn was marked burned.");
-                    return false;
+                    return errorCode.FAILED;
                 }
             }
 
             burnQueue[burnQueueMember].timesBurned--;
-            return true;
+            return errorCode.SUCCESS;
         }
 
 
@@ -1286,10 +1281,12 @@ namespace DiscDoingsWPF
         //Returns -1 if no match was found
         public int findFileByFullPath(string path)
         {
+            const string debugName = "BurnPoolManager::findFileByFullPath():";
             for (int i = 0; i < allFiles.Count; i++)
             {
                 if (allFiles[i].originalPath == path) return i;
             }
+            echoDebug(debugName + "A file with the full path of \"" + path + "\" was not found.");
             return -1;
         }
     
@@ -1532,6 +1529,7 @@ namespace DiscDoingsWPF
 
         
                                         //End burn organizing related code
+
 
 
         //Pass a List<FileProps> and it will tell you the total size, in bytes, of its contents
