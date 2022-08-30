@@ -64,8 +64,10 @@ namespace DiscDoingsWPF
 
         private void RemoveFileFromOneBurnButtonClick(object sender, RoutedEventArgs e)
         {
-            const bool debug = false;
-            const string debugName = "OneBurnViewDetails::RemoveFileFromOneBurnButtonClick():";
+            const bool debug = false, logging = true;
+            const string debugName = "OneBurnViewDetails::RemoveFileFromOneBurnButtonClick():", friendlyName = "";
+
+            
 
             if (debug)
             {

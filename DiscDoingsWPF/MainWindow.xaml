@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:DiscDoingsWPF"
         mc:Ignorable="d"
-        Title="MainWindow" Height="700" Width="800"
+        Title="MainWindow" Height="680" Width="800"
         x:Name="TheMainWindow">
     
     
@@ -18,7 +18,7 @@
                                   Click="New_Click"/>
                         <MenuItem Header="_Open" 
                                   Click="FileOpen_Click"/>
-                        <MenuItem Header="_Save" 
+                        <MenuItem Header="_Save As" 
                                   Click="FileSave_Click"/>
                         <Separator />
                         <MenuItem Header="_Exit" />
@@ -27,7 +27,7 @@
             </DockPanel>
             <TabControl>
                 <TabItem Header="All Files">
-                    <StackPanel>
+                    <StackPanel Height="615">
 
                         <Label Content="All files"
                        Margin ="0,15,0,0"
@@ -58,7 +58,8 @@
                                        x:Name="AllFiles_DetailsSize"
                                        Margin="8,0,0,0"/>
                                 <Button Content="Remove File"
-                                Click="AllFiles_RemoveFileButtonClick"/>
+                                Click="AllFiles_RemoveFileButtonClick"
+                                        ToolTip="Remove all selected files"/>
                             </StackPanel>
                         </StackPanel>
                         
@@ -66,27 +67,32 @@
                         
                         <Button Content="Add Files!"
                                 Click="OpenFilePicker"
-                                HorizontalAlignment="Center"/>
+                                HorizontalAlignment="Center"
+                                ToolTip="Add files to the burn pool"
+                                />
 
                         <Button Content="Add a Directory!"
                                 Margin="0,10,0,0"
                                 Click="OpenFolderPicker"
-                                HorizontalAlignment="Center"/>
+                                HorizontalAlignment="Center"
+                                ToolTip="Add the contents of a directory to the burn pool"/>
 
                         <Button Content="Audit All Files!" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
-                            Click="compareChecksums"/>
+                            Click="compareChecksums"
+                                ToolTip="Recalculate all checksums and compare to the checksum logged"/>
 
-                        <Button Content="Open Debug View" 
+                        <Button Content="View Log" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
-                            Click="openDebugWindow"/>
+                            Click="openDebugWindow"
+                            ToolTip="View the output log and number of pending operations"/>
 
-                        <!--<Button Content="Mystery button" 
+                        <!--<Button Content="Force window refresh" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
-                            Click="MixedUseButton"/> -->
+                            Click="MixedUseButton"/>-->
 
 
                     </StackPanel>
@@ -107,33 +113,36 @@
                         <Label Content="Volume Size (Bytes)"
                                Margin="0,0,0,0"/>
                         <TextBox
-                        x:Name="VolumeSizeTextInput"
-                        TextChanged="VolumeSizeTextInput_TextChanged">
+                        x:Name="VolumeSizeTextInput">
                         24220008448
                         </TextBox>
 
                             <Button
                         Margin="0,15,0,0"
-                        Click="CalculateBurnListButtonClick">
+                        Click="CalculateBurnListButtonClick"
+                                ToolTip="Sort all files in the burn pool into individual burns. This can take a long time!">
                             1: Generate individual burns
                         </Button>
 
                         <Button
                         Margin="0,15,0,0"
-                        Click="StageThisBurnButtonClick">
+                        Click="StageThisBurnButtonClick"
+                            ToolTip="Populate all of these files, and a log of these files and their checksums, into the Windows temporary burn directory.">
                             2: Stage this burn
                         </Button>
 
                         <Button
                         Margin="0,15,0,0"
-                        Click="MarkBurnedButtonClick">
+                        Click="MarkBurnedButtonClick"
+                            ToolTip="Move this burn to the Discs Burned tab. This will automaticla">
                             3: Mark this as burned
                         </Button>
                         
                         <Button
                         Margin="0,15,0,0"
                         Click="RemoveBurnButtonClick"
-                            Background="Tomato">
+                            Background="Tomato"
+                            ToolTip="Remove this burn, and free the files to be sorted into another burn later.">
                             Remove this burn
                         </Button>
 
