@@ -86,7 +86,7 @@ namespace DiscDoingsWPF
             startBurnPool();
             updateAllWindowsWhenTasksReachZero();
 
-            
+            informUser("Obligatory disclaimer: Do not use this work-in-progress software for anything important.\nBy testing this application, you agree that you accept personal responsibility for the integrity of your own data, and that any contributors to this project shall not be liable for any loss, destruction, dissemination, mishandling, corruption, conflagration, defenestration, or cromulation of data belonging to or under the care of you, your employer, or any other party.");
         }
 
         private void test()
