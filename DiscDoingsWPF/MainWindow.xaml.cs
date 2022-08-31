@@ -47,10 +47,10 @@ namespace DiscDoingsWPF
 
     public partial class MainWindow : Window
     {
-        string debugText = "Debug Output\n"; //Append any debug related messages to this string
+        string debugText = "Debug Output\nThis version has locks in place for additions to allFiles."; //Append any debug related messages to this string
         const string applicationName = "Burn Manager", applicationExtension = "chris";
         bool debugWindowOpen = false;
-        List<Task> fileAddTasks, burnQueueTasks, folderAddTasks;
+        List<Task> fileAddTasks, burnQueueTasks, folderAddTasks, auditTasks;
 
         //don't const this, it will be useful to let the user change it later
         string tempBurnFolder = "C:\\Users\\#UserName\\AppData\\Local\\Microsoft\\Windows\\Burn\\Burn1\\";
@@ -82,10 +82,11 @@ namespace DiscDoingsWPF
             fileAddTasks = new List<Task>();
             burnQueueTasks = new List<Task>();
             folderAddTasks = new List<Task>();
-            
+            auditTasks = new List<Task>();
             startBurnPool();
             updateAllWindowsWhenTasksReachZero();
 
+            
         }
 
         private void test()
@@ -131,7 +132,7 @@ namespace DiscDoingsWPF
         private async void compareChecksums(object sender, RoutedEventArgs e)
         {
             const string debugName = "MainWindow::compareChecksums():";
-            const bool debug = true;
+            const bool debug = false;
             if (debug) debugEcho(debugName + "Start");
             List<errorCodeAndIndex> badResults = await auditFiles();
 
@@ -157,10 +158,31 @@ namespace DiscDoingsWPF
             const string debugName = "MainWindow::auditFiles():";
             const bool debug = false;
             debugEcho(debugName + "Starting asynchronous checksum check.");
+            object lockObject = new object();
 
             List<errorCodeAndIndex> badResults = new List<errorCodeAndIndex>();
-            List<Task> taskQueue = new List<Task>();
+            //List<Task> taskQueue = new List<Task>();
 
+            if (false) //Asynchronous version (currently broken)
+            {
+                for (int i = 0; i < burnpool.allFiles.Count; i++)
+                {
+                    auditTasks.Add(Task.Run(() =>
+                    {
+                        errorCodeAndIndex temp;
+                        temp.resultCode = burnpool.compareChecksumToFileSystem(i);
+                        temp.index = i;
+                        if (temp.resultCode != BurnPoolManager.errorCode.FILES_EQUAL)
+                        {
+                            lock (lockObject)
+                            {
+                                badResults.Add(temp);
+                                burnpool.setErrorCode(i, temp.resultCode);
+                            }
+                        }
+                    }));
+                }
+            }
 
             await Task.Run(() => {
                 //System.Windows.MessageBox.Show("WE HERE");
@@ -182,24 +204,25 @@ namespace DiscDoingsWPF
                 }
             });
 
-            
-
             if (debug) debugEcho(debugName + "Done");
             return badResults;
 
         }
 
+        
         //Goes to the ListBox in the burn view
         private void ChooseBurnList(object sender, SelectionChangedEventArgs args)
         {
             
         }
-
+        
+        
         //Called when an item in AllFilesListBox is clicked
         private void ChooseFileList(object sender, SelectionChangedEventArgs args)
         {
             updateMainScreenFileDetails();
         }
+        
 
         //Updates the file details attributes on the main screen based on whatever file is selected in the file picker.
         private void updateMainScreenFileDetails()
@@ -267,11 +290,18 @@ namespace DiscDoingsWPF
         private void startBurnPool()
         {
             //string[] directories = { @"C:\Users\coldc\Downloads", @"C:\Users\coldc\Documents\testing data compare\files of various sizes" };
-
+            const string hello = "Welcome to " + applicationName + "!\nYou are currently experiencing build 0.1, the first proof of concept build.\nAll core functionality is present, but it's not very pretty yet.\nPlease test it out and feel free to inform me of any bugs, or questionable behavior.\nView the Log to see this message again and usage instructions. Have fun!";
+            const string instructions = "\n\nUsage instructions:\nStart by adding any files you would like in your backup using \"Add Files!\" or \"Add a Directory!\"\nAn MD5 checksum will be made of each file as it is added. To recheck these checksums, you can click the \"Audit All Files!\" button. Keep in mind that these operations may be slow when processing many files.\nDouble-click a file in the 'All files' list to see more details about it.\"" +
+                "\nThe 'Burn view' tab is where it will divide the files out for you. Put in the size of your backup media in bytes and click 'Generate individual burns.' \nOnce it's done, your files will have been distributed to fit efficiently across however many volumes are needed. Hopefully, this will be as few volumes as possible (further algorithm tweaks may come in the future!)\nThe 'Stage this burn' button will stage the burn into your Windows temporary burn directory, and include a text file listing every file that is going into that burn plus some attributes.\nIf there isn't room for this text file, the smallest file(s) will be removed from that burn to make space.\nOnce your volume is burned, cilck 'Mark this as burned' to move it to the discs burned tab. \nEach file will have its hash rechecked against the file system when you do this to ensure integrity!\nOnce a disc is marked as burned, files belonging to that burn can't be removed from the main file list, and that burn cannot be deleted, unless it's unmarked.";
             debugEcho("Initializing burnpool");
             burnpool = new BurnPoolManager(this);
             VolumeSizeTextInput.Text = "";
             updateAllWindows();
+
+            debugEcho("Using file version " + BurnPoolManager.formatVersion);
+            debugEcho(hello);
+            informUser(hello);
+            debugEcho(instructions);
 
             lastSavedInstance = new BurnPoolManager(burnpool);
         }
@@ -1056,6 +1086,18 @@ namespace DiscDoingsWPF
                 {
                     if (folderAddTasks[i] == null) break;
                     if (!folderAddTasks[i].IsCompleted) tasks++;
+                }
+                catch
+                {
+                    break;
+                }
+            }
+            for (int i = 0; i < auditTasks.Count; i++)
+            {
+                try
+                {
+                    if (auditTasks[i] == null) break;
+                    if (!auditTasks[i].IsCompleted) tasks++;
                 }
                 catch
                 {
