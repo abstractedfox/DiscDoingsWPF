@@ -24,6 +24,8 @@ namespace DiscDoingsWPF
         public hashTypes hashTypeUsed { get; set; }
         public MainWindow? mainWindow; //This will be used to get access to the debug string in MainWindow
 
+        private object lockObjectFiles;
+
         public const int formatVersion = 3;
         //formatVersion 1 adds the hashTypes enum, the hashType field to FileProps,
         //the HashTypeUsed field to BurnPoolManager, the createHashMD5 function, and this field indicating the format version.
@@ -234,6 +236,7 @@ namespace DiscDoingsWPF
             hashTypeUsed = hashTypes.MD5;
             mainWindow = null;
             tasksPendingFlag = false;
+            lockObjectFiles = new object();
         }
 
         public BurnPoolManager(MainWindow programMainWindow)
@@ -247,6 +250,7 @@ namespace DiscDoingsWPF
             hashTypeUsed = hashTypes.MD5;
             mainWindow = programMainWindow;
             tasksPendingFlag = false;
+            lockObjectFiles = new object();
         }
 
 
@@ -381,18 +385,24 @@ namespace DiscDoingsWPF
                 }
                 newFile.checksum = hashtime;
 
-                for (int i = 0; i < allFiles.Count; i++)
+                lock (lockObjectFiles)
                 {
-                    if (allFiles[i].originalPath == newFile.originalPath)
+                    for (int i = 0; i < allFiles.Count; i++)
                     {
-                        //Do something that tells the user this file is a duplicate
-                        echoDebug(debugName + "Duplicates found: [" + allFiles[i].originalPath + "] and [" + newFile.originalPath + "]");
-                        return;
+                        if (allFiles[i].originalPath == newFile.originalPath)
+                        {
+                            //Do something that tells the user this file is a duplicate
+                            echoDebug(debugName + "Duplicates found: [" + allFiles[i].originalPath + "] and [" + newFile.originalPath + "]");
+                            return;
+                        }
                     }
                 }
 
-                allFiles.Add(newFile);
-                allFilesNotInBurnQueue.Add(newFile);
+                lock (lockObjectFiles)
+                {
+                    allFiles.Add(newFile);
+                    allFilesNotInBurnQueue.Add(newFile);
+                }
             });
 
         }
@@ -413,11 +423,15 @@ namespace DiscDoingsWPF
                 return false;
             }
 
-            if (!allFiles.Remove(fileToRemove))
+            lock (lockObjectFiles)
             {
-                echoDebug(debugName + "File " + fullPath + " was not found in this BurnPoolManager.");
-                return false;
+                if (!allFiles.Remove(fileToRemove))
+                {
+                    echoDebug(debugName + "File " + fullPath + " was not found in this BurnPoolManager.");
+                    return false;
+                }
             }
+
             
             allFilesNotInBurnQueue.Remove(fileToRemove).ToString();
 
@@ -686,7 +700,7 @@ namespace DiscDoingsWPF
                 return errorCode.FILE_NOT_FOUND_IN_FILESYSTEM;
             }
 
-
+            
 
             byte[] checksum = createHash(fInfo);
 
@@ -770,7 +784,10 @@ namespace DiscDoingsWPF
                     //Ignore the checksum, as we may use this function to set error codes indicating inequal checksums
                     if (FilePropsEqual(burnQueue[i].files[x], replacementFile, true) && burnQueue[i].timesBurned == 0)
                     {
-                        burnQueue[i].files[x] = replacementFile;
+                        lock (lockObjectFiles)
+                        {
+                            burnQueue[i].files[x] = replacementFile;
+                        }
                     }
                 }
             }
@@ -881,6 +898,7 @@ namespace DiscDoingsWPF
 
             do
             {
+                if (debug) echoDebug(debugName + "Files remaining in allFilesNotInBurnQueue: " + allFilesNotInBurnQueue.Count);
                 int? nextFile = findFileByNearestSizeA(allFilesNotInBurnQueue, spaceTarget, aBurn.spaceRemaining);
 
                 if (verbose)
@@ -910,12 +928,12 @@ namespace DiscDoingsWPF
             if (aBurn.files.Count > 0)
             {
                 burnQueue.Add(aBurn);
-                if (verbose) echoDebug(debugName + "aBurn generated, exiting " + debugName);
+                if (verbose || debug) echoDebug(debugName + "aBurn generated, exiting " + debugName);
                 return true;
             }
             else
             {
-                if (verbose) echoDebug(debugName + "aBurn was not generated, exiting " + debugName);
+                if (verbose || debug) echoDebug(debugName + "aBurn was not generated, exiting " + debugName);
                 return false;
             }
             
@@ -1065,7 +1083,7 @@ namespace DiscDoingsWPF
         public errorCode commitOneBurn(int burnQueueMember, bool verifyFiles)
         {
             const string debugName = "BurnPoolManager::commitOneBurn:", friendlyName = debugName;
-            const bool debug = false;
+            const bool debug = false, verbose = true;
 
             if (burnQueueMember > burnQueue.Count || burnQueueMember < 0){
                 echoDebug(debugName + "Index of " + burnQueueMember + " is out of range.");
@@ -1080,10 +1098,12 @@ namespace DiscDoingsWPF
             int verifyCount = burnQueue[burnQueueMember].files.Count;
             if (verifyFiles)
             {
-
                 bool foundFaults = false;
                 for (int i = 0; i < verifyCount; i++)
                 {
+
+                    if (verbose) echoDebug(debugName + "On file " + i + " of " + verifyCount);
+
                     if (tasksPendingFlag)
                     {
                         echoDebug(debugName + "Operation canceled by tasks in progress. Please wait for tasks to complete.");
