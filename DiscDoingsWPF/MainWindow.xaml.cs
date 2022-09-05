@@ -47,8 +47,8 @@ namespace DiscDoingsWPF
 
     public partial class MainWindow : Window
     {
-        string debugText = "Debug Output\nThis version has locks in place for additions to allFiles."; //Append any debug related messages to this string
-        const string applicationName = "Burn Manager", applicationExtension = "chris";
+        string debugText = "Debug Output\n"; //Append any debug related messages to this string
+        const string applicationName = "Burn Manager", applicationExtension = "burnlog";
         bool debugWindowOpen = false;
         List<Task> fileAddTasks, burnQueueTasks, folderAddTasks, auditTasks;
 
@@ -163,46 +163,76 @@ namespace DiscDoingsWPF
             List<errorCodeAndIndex> badResults = new List<errorCodeAndIndex>();
             //List<Task> taskQueue = new List<Task>();
 
-            if (false) //Asynchronous version (currently broken)
+            List<int> iValues = new List<int>(); //for debugging only
+
+            if (true) //Asynchronous version (currently broken)
             {
                 for (int i = 0; i < burnpool.allFiles.Count; i++)
                 {
-                    auditTasks.Add(Task.Run(() =>
-                    {
-                        errorCodeAndIndex temp;
-                        temp.resultCode = burnpool.compareChecksumToFileSystem(i);
-                        temp.index = i;
-                        if (temp.resultCode != BurnPoolManager.errorCode.FILES_EQUAL)
+                    errorCodeAndIndex temp = new errorCodeAndIndex();
+                    int copyI = i;
+                    auditTasks.Add(Task.Run(() => {
+                        temp.resultCode = burnpool.compareChecksumToFileSystem(copyI);
+                        temp.index = copyI;
+                        lock (lockObject)
                         {
-                            lock (lockObject)
-                            {
-                                badResults.Add(temp);
-                                burnpool.setErrorCode(i, temp.resultCode);
-                            }
+                            iValues.Add(copyI);
                         }
                     }));
+                    if (temp.resultCode != BurnPoolManager.errorCode.FILES_EQUAL)
+                    {
+                        lock (lockObject)
+                        {
+                            badResults.Add(temp);
+                            burnpool.setErrorCode(i, temp.resultCode);
+                        }
+                    }
                 }
             }
 
-            await Task.Run(() => {
-                //System.Windows.MessageBox.Show("WE HERE");
-                for (int i = 0; i < burnpool.allFiles.Count; i++)
+            await Task.Run(() =>
+            {
+                while (getPendingTasks() > 0) ;
+
+                //this block is for debugging only
                 {
-                    errorCodeAndIndex asdf;
-                    asdf.resultCode = burnpool.compareChecksumToFileSystem(i);
-                    asdf.index = i;
-
-                    
-                    BurnPoolManager.FileProps replacementFile = burnpool.allFiles[i];
-                    replacementFile.fileStatus = asdf.resultCode;
-                    burnpool.allFiles[i] = replacementFile;
-                    //Yes, this is the only way to alter resultCode; it's a value type and there's no handy way to modify it directly
-
-                    if (asdf.resultCode != BurnPoolManager.errorCode.FILES_EQUAL) badResults.Add(asdf);
-
-                    if (debug) debugEchoAsync(debugName + burnpool.allFiles[i].fileName + ": " + asdf.ToString());
+                    debugEcho(debugName + "Starting i value check");
+                    for (int i = 0; i < iValues.Count; i++)
+                    {
+                        for (int x = i + 1; x < iValues.Count; x++)
+                        {
+                            if (iValues[i] == iValues[x]) debugEcho(debugName + "Duplicate i value found.");
+                        }
+                    }
+                    debugEcho(debugName + "i value check done");
                 }
+
+                return badResults;
             });
+
+            if (false)
+            {
+                await Task.Run(() =>
+                {
+                    //System.Windows.MessageBox.Show("WE HERE");
+                    for (int i = 0; i < burnpool.allFiles.Count; i++)
+                    {
+                        errorCodeAndIndex asdf;
+                        asdf.resultCode = burnpool.compareChecksumToFileSystem(i);
+                        asdf.index = i;
+
+
+                        BurnPoolManager.FileProps replacementFile = burnpool.allFiles[i];
+                        replacementFile.fileStatus = asdf.resultCode;
+                        burnpool.allFiles[i] = replacementFile;
+                        //Yes, this is the only way to alter resultCode; it's a value type and there's no handy way to modify it directly
+
+                        if (asdf.resultCode != BurnPoolManager.errorCode.FILES_EQUAL) badResults.Add(asdf);
+
+                        if (debug) debugEchoAsync(debugName + burnpool.allFiles[i].fileName + ": " + asdf.ToString());
+                    }
+                });
+            }
 
             if (debug) debugEcho(debugName + "Done");
             return badResults;
@@ -231,7 +261,6 @@ namespace DiscDoingsWPF
             const string debugName = "updateMainScreenFileDetails():";
             const bool debug = false;
             long fileSizeTally = 0;
-            string fileLocation;
 
             if (AllFilesListBox.SelectedItems.Count == 0)
             {
