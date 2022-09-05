@@ -707,6 +707,8 @@ namespace DiscDoingsWPF
             if (byteArrayEqual(checksum, allFiles[allFilesIndex].checksum))
             {
                 if (debug) echoDebug(friendlyName + "The file \"" + allFiles[allFilesIndex].originalPath + "\" appears to be OK.");
+
+
                 return errorCode.FILES_EQUAL;
             }
             logOutput(friendlyName + "The file \"" + allFiles[allFilesIndex].originalPath + "\" does not match the checksum made when the file was added.");
@@ -1083,7 +1085,7 @@ namespace DiscDoingsWPF
         public errorCode commitOneBurn(int burnQueueMember, bool verifyFiles)
         {
             const string debugName = "BurnPoolManager::commitOneBurn:", friendlyName = debugName;
-            const bool debug = false, verbose = true;
+            const bool debug = false, verbose = false;
 
             if (burnQueueMember > burnQueue.Count || burnQueueMember < 0){
                 echoDebug(debugName + "Index of " + burnQueueMember + " is out of range.");

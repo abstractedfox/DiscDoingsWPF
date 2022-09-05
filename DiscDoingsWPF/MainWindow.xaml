@@ -117,12 +117,21 @@
                         24220008448
                         </TextBox>
 
-                            <Button
+                        <Label Content="Staging Directory"
+                               Margin="0,0,0,0"/>
+                        <TextBox
+                        x:Name="StagingPathTextInput">
+                            
+                        </TextBox>
+
+                        <Button
                         Margin="0,15,0,0"
                         Click="CalculateBurnListButtonClick"
                                 ToolTip="Sort all files in the burn pool into individual burns. This can take a long time!">
                             1: Generate individual burns
                         </Button>
+                        
+                        
 
                         <Button
                         Margin="0,15,0,0"
