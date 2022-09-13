@@ -89,11 +89,12 @@
                             Click="openDebugWindow"
                             ToolTip="View the output log and number of pending operations"/>
 
-                        <!--<Button Content="Force window refresh" 
+                        <!--<Button Content="Mystery button" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
-                            Click="MixedUseButton"/>-->
-
+                            Click="MixedUseButton"
+                            ToolTip="A button used for various debugging purposes."/>
+                        -->
 
                     </StackPanel>
 
@@ -118,11 +119,15 @@
                         </TextBox>
 
                         <Label Content="Staging Directory"
-                               Margin="0,0,0,0"/>
-                        <TextBox
+                               Margin="0,0,0,0"
+                               ToolTip="Windows has a separate burn directory for each burn-capable drive installed."/>
+                        <!--<TextBox
                         x:Name="StagingPathTextInput">
-                            
-                        </TextBox>
+                        </TextBox>-->
+                        <ComboBox x:Name="StagingPathComboBox"
+                                  IsEditable="True"></ComboBox>
+                        
+                        
 
                         <Button
                         Margin="0,15,0,0"

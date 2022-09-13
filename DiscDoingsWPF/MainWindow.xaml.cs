@@ -63,7 +63,8 @@ namespace DiscDoingsWPF
         {
             DISC_ALREADY_BURNED,
             FILE_AUDIT_FAILED,
-            TASKS_PENDING
+            TASKS_PENDING,
+            STAGING_PATH_INVALID
         }
 
         public enum errorCode
@@ -326,6 +327,12 @@ namespace DiscDoingsWPF
             burnpool = new BurnPoolManager(this);
             VolumeSizeTextInput.Text = "";
             updateAllWindows();
+            errorCode burnDirsSuccess = getBurnDirectories();
+            if (burnDirsSuccess != errorCode.SUCCESS)
+            {
+                debugEcho("Warning: The system's burn directories could not be found automatically. When staging files to be burned, it may be necessary to manually input the path of your system's temporary burn folder.");
+
+            }
 
             debugEcho("Using file version " + BurnPoolManager.formatVersion);
             debugEcho(hello);
@@ -374,7 +381,7 @@ namespace DiscDoingsWPF
 
         public void informUser(userMessages message)
         {
-            string usertext = "Initialized Value";
+            string usertext = message.ToString();
             switch (message)
             {
                 case userMessages.DISC_ALREADY_BURNED:
@@ -385,6 +392,9 @@ namespace DiscDoingsWPF
                     break;
                 case userMessages.TASKS_PENDING:
                     usertext = "There are still tasks in progress. Please wait until tasks finish.";
+                    break;
+                case userMessages.STAGING_PATH_INVALID:
+                    usertext = "Please choose or input a valid path to stage this burn.";
                     break;
             }
             System.Windows.MessageBox.Show(usertext);
@@ -540,7 +550,11 @@ namespace DiscDoingsWPF
 
 
             errorCode a = StageABurn((int)oneBurnToStage, true);
-            logOutput(friendlyName + "The burn " + burnpool.burnQueue[(int)oneBurnToStage].name + " was staged with the result code " + a.ToString() + ".");
+            if (a == errorCode.SUCCESS) logOutput(friendlyName + "The burn " + burnpool.burnQueue[(int)oneBurnToStage].name + " was staged with the result code " + a.ToString() + ".");
+            else
+            {
+                logOutput(friendlyName + "The burn " + burnpool.burnQueue[(int)oneBurnToStage].name + " was not staged, error " + a.ToString() + " was produced.");
+            }
         }
 
         //Stage the contents of a OneBurn into the windows burn directory
@@ -548,16 +562,30 @@ namespace DiscDoingsWPF
         private errorCode StageABurn(int burnQueueIndex, bool includeBurnRecord)
         {
             const string debugName = "MainWindow::StageABurn():", friendlyName = debugName;
-            const bool debug = false;
+            const bool debug = true;
 
-            string userName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
-            userName = userName.Substring(userName.IndexOf("\\") + 1);
-            tempBurnFolder = tempBurnFolder.Replace("#UserName", userName);
+            string? tempBurnFolder = StagingPathComboBox.Text.ToString();
+
+            if (tempBurnFolder == null)
+            {
+                informUser(userMessages.STAGING_PATH_INVALID);
+                logOutput(friendlyName + "A burn staging path was not entered.");
+                return errorCode.DIRECTORY_NOT_FOUND;
+            }
 
             if (!Directory.Exists(tempBurnFolder))
             {
+                informUser(userMessages.STAGING_PATH_INVALID);
+                logOutput(friendlyName + "The path \"" + tempBurnFolder + "\" is invalid.");
                 return errorCode.DIRECTORY_NOT_FOUND;
             }
+
+            if (debug) debugEcho(debugName + "Staging to directory: " + tempBurnFolder);
+
+            //string userName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
+            //userName = userName.Substring(userName.IndexOf("\\") + 1);
+            //tempBurnFolder = tempBurnFolder.Replace("#UserName", userName);
+
 
             if (includeBurnRecord)
             {
@@ -1406,8 +1434,10 @@ namespace DiscDoingsWPF
 
         private void MixedUseButton(object sender, RoutedEventArgs e)
         {
-            updateAllWindowsWhenTasksComplete();
-            cleanUpTaskLists();
+            //updateAllWindowsWhenTasksComplete();
+            //cleanUpTaskLists();
+
+            getBurnDirectories();
         }
 
         private async void FileOpen_Click(object sender, RoutedEventArgs e)
@@ -1514,6 +1544,35 @@ namespace DiscDoingsWPF
 
         }
 
+        //Find the burn directories on the user's system and populate the ComboBox with them.
+        //Systems with multiple drives will sometimes have multiple burn directories
+        private errorCode getBurnDirectories()
+        {
+            const string debugName = "MainWindow::getBurnDirectories():";
+            const bool debug = false;
 
+            string rootBurnPath = "C:\\Users\\#UserName\\AppData\\Local\\Microsoft\\Windows\\Burn\\";
+            string userName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
+            userName = userName.Substring(userName.IndexOf("\\") + 1);
+            rootBurnPath = rootBurnPath.Replace("#UserName", userName);
+
+            if (!Directory.Exists(rootBurnPath))
+            {
+                return errorCode.DIRECTORY_NOT_FOUND;
+
+            }
+            string []burnDirs = Directory.GetDirectories(rootBurnPath, "burn*");
+
+            for (int i = 0; i < burnDirs.Length; i++)
+            {
+                burnDirs[i] += "\\";
+                StagingPathComboBox.Items.Add(burnDirs[i]);
+            }
+
+            StagingPathComboBox.SelectedItem = StagingPathComboBox.Items[0];
+
+            return errorCode.SUCCESS;
+
+        }
     }
 }
