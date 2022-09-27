@@ -15,11 +15,11 @@
                 <Menu DockPanel.Dock="Top">
                     <MenuItem Header="_File">
                         <MenuItem Header="_New" 
-                                  Click="New_Click"/>
+                                  Click="_New_Click"/>
                         <MenuItem Header="_Open" 
-                                  Click="FileOpen_Click"/>
+                                  Click="_FileOpen_Click"/>
                         <MenuItem Header="_Save As" 
-                                  Click="FileSave_Click"/>
+                                  Click="_FileSave_Click"/>
                         <Separator />
                         <MenuItem Header="_Exit" />
                     </MenuItem>
@@ -41,9 +41,9 @@
                             x:Name="AllFilesListBox"
                             Width="400"
                             Height="400"
-                            SelectionChanged="ChooseFileList"
+                            SelectionChanged="_ChooseFileList"
                             SelectionMode="Extended"
-                            MouseDoubleClick="FileViewListBox_MouseDoubleClick"
+                            MouseDoubleClick="_FileViewListBox_MouseDoubleClick"
                             />
                             <StackPanel Orientation="Vertical"
                                         Width="290"
@@ -58,7 +58,7 @@
                                        x:Name="AllFiles_DetailsSize"
                                        Margin="8,0,0,0"/>
                                 <Button Content="Remove File"
-                                Click="AllFiles_RemoveFileButtonClick"
+                                Click="_AllFiles_RemoveFileButtonClick"
                                         ToolTip="Remove all selected files"/>
                             </StackPanel>
                         </StackPanel>
@@ -66,27 +66,27 @@
                         
                         
                         <Button Content="Add Files!"
-                                Click="OpenFilePicker"
+                                Click="_OpenFilePicker"
                                 HorizontalAlignment="Center"
                                 ToolTip="Add files to the burn pool"
                                 />
 
                         <Button Content="Add a Directory!"
                                 Margin="0,10,0,0"
-                                Click="OpenFolderPicker"
+                                Click="_OpenFolderPicker"
                                 HorizontalAlignment="Center"
                                 ToolTip="Add the contents of a directory to the burn pool"/>
 
                         <Button Content="Audit All Files!" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
-                            Click="compareChecksums"
+                            Click="_CompareChecksums"
                                 ToolTip="Recalculate all checksums and compare to the checksum logged"/>
 
                         <Button Content="View Log" 
                             HorizontalAlignment="Center" 
                             Margin="0,10,0,0"
-                            Click="openDebugWindow"
+                            Click="_OpenDebugWindow"
                             ToolTip="View the output log and number of pending operations"/>
 
                         <!--<Button Content="Mystery button" 
@@ -106,9 +106,9 @@
                     x:Name="BurnViewListBox"
                     Width="500"
                     Height="300"
-                    SelectionChanged="ChooseBurnList"
+                    SelectionChanged="_ChooseBurnList"
                     SelectionMode="Single"
-                    MouseDoubleClick="BurnViewListBox_MouseDoubleClick"
+                    MouseDoubleClick="_BurnViewListBox_MouseDoubleClick"
                     />
 
                         <Label Content="Volume Size (Bytes)"
@@ -131,7 +131,7 @@
 
                         <Button
                         Margin="0,15,0,0"
-                        Click="CalculateBurnListButtonClick"
+                        Click="_CalculateBurnListButtonClick"
                                 ToolTip="Sort all files in the burn pool into individual burns. This can take a long time!">
                             1: Generate individual burns
                         </Button>
@@ -140,21 +140,21 @@
 
                         <Button
                         Margin="0,15,0,0"
-                        Click="StageThisBurnButtonClick"
+                        Click="_StageThisBurnButtonClick"
                             ToolTip="Populate all of these files, and a log of these files and their checksums, into the Windows temporary burn directory.">
                             2: Stage this burn
                         </Button>
 
                         <Button
                         Margin="0,15,0,0"
-                        Click="MarkBurnedButtonClick"
+                        Click="_MarkBurnedButtonClick"
                             ToolTip="Move this burn to the Discs Burned tab. This will automaticla">
                             3: Mark this as burned
                         </Button>
                         
                         <Button
                         Margin="0,15,0,0"
-                        Click="RemoveBurnButtonClick"
+                        Click="_RemoveBurnButtonClick"
                             Background="Tomato"
                             ToolTip="Remove this burn, and free the files to be sorted into another burn later.">
                             Remove this burn
@@ -174,11 +174,11 @@
                         Width="400"
                         Height="400"
                         SelectionMode="Single"
-                    MouseDoubleClick="BurnedDiscsListBox_MouseDoubleClick"
+                    MouseDoubleClick="_BurnedDiscsListBox_MouseDoubleClick"
                         />
                         <Button
                         Margin="0,15,0,0"
-                        Click="MarkUnburnedButtonClick">
+                        Click="_MarkUnburnedButtonClick">
                             Unmark this as burned
                         </Button>
                     </StackPanel>
