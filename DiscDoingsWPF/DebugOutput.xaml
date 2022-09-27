@@ -6,8 +6,8 @@
         xmlns:local="clr-namespace:DiscDoingsWPF"
         mc:Ignorable="d"
         Title="DebugOutput" Height="450" Width="800"
-        Closed="hideThis"
-        Closing="hideThis">
+        Closed="HideThis"
+        Closing="HideThis">
     <Grid>
         <StackPanel>
             <Label x:Name="DebugOutputTaskCounter"

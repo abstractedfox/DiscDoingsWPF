@@ -19,53 +19,53 @@ namespace DiscDoingsWPF
     /// </summary>
     public partial class FilePropsViewDetails : Window
     {
-        BurnPoolManager? burnpoolref;
-        MainWindow mainWindowReference;
+        private BurnPoolManager? _burnPoolRef;
+        private MainWindow _mainWindowReference;
 
         public FilePropsViewDetails(ref BurnPoolManager burnpool, MainWindow parentWindow, int allFilesIndex)
         {
             InitializeComponent();
 
-            burnpoolref = burnpool;
-            mainWindowReference = parentWindow;
+            _burnPoolRef = burnpool;
+            _mainWindowReference = parentWindow;
 
-            if (burnpoolref == null)
+            if (_burnPoolRef == null)
             {
-                parentWindow.debugEcho("OneBurnViewDetails: Passed BurnPoolManager reference is null");
+                parentWindow.DebugEcho("OneBurnViewDetails: Passed BurnPoolManager reference is null");
             }
             else
             {
-                populateFields(allFilesIndex);
+                PopulateFields(allFilesIndex);
             }
         }
 
-        public void populateFields(int allFilesIndex)
+        public void PopulateFields(int allFilesIndex)
         {
             FilePropsDetailsListBox.Items.Clear();
 
-            FilePropsViewDetails_FileName.Content = burnpoolref.allFiles[allFilesIndex].fileName;
-            FilePropsViewDetails_OriginalPath.Text = burnpoolref.allFiles[allFilesIndex].originalPath;
-            FilePropsViewDetails_Size.Content = burnpoolref.allFiles[allFilesIndex].size;
+            FilePropsViewDetails_FileName.Content = _burnPoolRef.AllFiles[allFilesIndex].FileName;
+            FilePropsViewDetails_OriginalPath.Text = _burnPoolRef.AllFiles[allFilesIndex].OriginalPath;
+            FilePropsViewDetails_Size.Content = _burnPoolRef.AllFiles[allFilesIndex].Size;
 
             string checksum = "";
-            for (int i = 0; i < burnpoolref.allFiles[allFilesIndex].checksum.Length; i++)
+            for (int i = 0; i < _burnPoolRef.AllFiles[allFilesIndex].Checksum.Length; i++)
             {
-                checksum += burnpoolref.allFiles[allFilesIndex].checksum[i].ToString();
+                checksum += _burnPoolRef.AllFiles[allFilesIndex].Checksum[i].ToString();
             }
             FilePropsViewDetails_Checksum.Text = checksum;
-            FilePropsViewDetails_DateAdded.Content = burnpoolref.allFiles[allFilesIndex].timeAdded;
-            FilePropsViewDetails_LastModified.Content = burnpoolref.allFiles[allFilesIndex].lastModified;
-            FilePropsViewDetails_Status.Content = burnpoolref.allFiles[allFilesIndex].fileStatus;
+            FilePropsViewDetails_DateAdded.Content = _burnPoolRef.AllFiles[allFilesIndex].TimeAdded;
+            FilePropsViewDetails_LastModified.Content = _burnPoolRef.AllFiles[allFilesIndex].LastModified;
+            FilePropsViewDetails_Status.Content = _burnPoolRef.AllFiles[allFilesIndex].FileStatus;
 
-            if (burnpoolref.allFiles[allFilesIndex].discsBurned.Count == 0)
+            if (_burnPoolRef.AllFiles[allFilesIndex].DiscsBurned.Count == 0)
             {
                 FilePropsDetailsListBox.Items.Add("This file has not been burned to any discs.");
             }
             else
             {
-                for (int i = 0; i < burnpoolref.allFiles[allFilesIndex].discsBurned.Count; i++)
+                for (int i = 0; i < _burnPoolRef.AllFiles[allFilesIndex].DiscsBurned.Count; i++)
                 {
-                    FilePropsDetailsListBox.Items.Add(burnpoolref.allFiles[allFilesIndex].discsBurned[i]);
+                    FilePropsDetailsListBox.Items.Add(_burnPoolRef.AllFiles[allFilesIndex].DiscsBurned[i]);
                 }
             }
         }

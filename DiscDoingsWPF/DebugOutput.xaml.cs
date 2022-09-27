@@ -49,7 +49,7 @@ namespace DiscDoingsWPF
             //this.Hide();
         }
 
-        void hideThis(object sender, EventArgs e)
+        void HideThis(object sender, EventArgs e)
         {
             //MessageBox.Show("squonch");
             //this.Hide();
