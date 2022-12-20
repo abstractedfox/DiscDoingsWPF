@@ -494,7 +494,7 @@ namespace DiscDoingsWPF
         //Button handler to stage a burn
         private void _StageThisBurnButtonClick(object sender, RoutedEventArgs e)
         {
-            const string debugName = "MainWindow::StageThisBurnButtonClick():", friendlyName = "";
+            const string debugName = "MainWindow::StageThisBurnButtonClick():", friendlyName = debugName;
 
             if (BurnViewListBox.SelectedItems.Count == 0)
             {
@@ -968,7 +968,7 @@ namespace DiscDoingsWPF
 
         private async void _StartNewFolderTask(StorageFolder folder)
         {
-            bool logging = true;
+            //bool logging = true;
             IReadOnlyList<IStorageItem> newfolder = await folder.GetItemsAsync();
             _fileAddTasks.Add(_AddFolderRecursive(newfolder, true));
 
