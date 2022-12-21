@@ -23,7 +23,9 @@ using System.Windows.Forms;
 using System.Text.Json;
 
 using System.Threading;
-
+using System.Collections;
+using Windows.ApplicationModel.UserDataTasks;
+using System.Runtime.CompilerServices;
 
 namespace DiscDoingsWPF
 {
@@ -45,12 +47,86 @@ namespace DiscDoingsWPF
 
     }
 
+    public class TaskContainer<Task> : ICollection
+    {
+        List<Task> taskItems = new List<Task>();
+
+        public Task this[int i]
+        {
+            get { return taskItems[i]; }
+            set { taskItems[i] = value; }
+        }
+
+        public void Add(Task itemToAdd)
+        {
+            taskItems.Add(itemToAdd);
+        }
+
+        public void RemoveAt(int index)
+        {
+            try
+            {
+                taskItems.RemoveAt(index);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        public void CopyTo(Task[] array, int arrayIndex)
+        {
+            taskItems.CopyTo(array, arrayIndex);
+        }
+
+        void ICollection.CopyTo(Array array, int index)
+        {
+            throw new NotImplementedException();
+            //This is the only way to make the compiler happy
+        }
+
+        public int Count
+        {
+            get
+            {
+                return taskItems.Count;
+            }
+        }
+
+        //int ICollection.Count => ((ICollection)taskItems).Count;
+
+        public IEnumerator GetEnumerator()
+        {
+            return ((IEnumerable)taskItems).GetEnumerator();
+        }
+
+
+        public object SyncRoot
+        {
+            get
+            {
+                return this; //the documentation says to return the current instance
+            }
+        }
+
+        public bool IsSynchronized
+        {
+            get
+            {
+                return false; //Change this to true if we decide to build locks into this class rather than places where it's used
+            }
+        }
+
+
+    }
+
     public partial class MainWindow : Window
     {
         private string _debugText = "Debug Output\n"; //Append any debug related messages to this string
         private const string _applicationName = "Burn Manager", applicationExtension = "burnlog";
         bool debugWindowOpen = false;
-        private List<Task> _fileAddTasks, _burnQueueTasks, _folderAddTasks, _auditTasks;
+        private List<Task> _burnQueueTasks, _folderAddTasks, _auditTasks;
+        private TaskContainer<Task> _fileAddTasks;
 
         //don't const this, it will be useful to let the user change it later
         //private string _tempBurnFolder = "C:\\Users\\#UserName\\AppData\\Local\\Microsoft\\Windows\\Burn\\Burn1\\";
@@ -80,7 +156,7 @@ namespace DiscDoingsWPF
         public MainWindow()
         {
             InitializeComponent();
-            _fileAddTasks = new List<Task>();
+            _fileAddTasks = new TaskContainer<Task>();
             _burnQueueTasks = new List<Task>();
             _folderAddTasks = new List<Task>();
             _auditTasks = new List<Task>();
@@ -895,7 +971,7 @@ namespace DiscDoingsWPF
             if (debugVerbose) DebugEcho(debugName + "Adding folder " + theFolder.Name);
             if (logging) LogOutput(friendlyName + "Adding folder " + theFolder.Name);
             IReadOnlyList<IStorageItem> foldercontents = await theFolder.GetItemsAsync();
-            _folderAddTasks.Add(_AddFolderRecursive(foldercontents, true));
+            _folderAddTasks.Add(_addFolderRecursive(foldercontents, true));
 
             
             _UpdateAllWindowsWhenTasksComplete();
@@ -909,21 +985,22 @@ namespace DiscDoingsWPF
 
         }
 
-        private async Task<Task> _AddFolderRecursive(IReadOnlyList<IStorageItem> foldercontents, bool recursion)
+        private async Task<Task> _addFolderRecursive(IReadOnlyList<IStorageItem> foldercontents, bool recursion)
         {
             const string debugName = "MainWindow::addFolderRecursive():", friendlyName = "";
             const bool debugVerbose = false, logging = true;
             
-            List<StorageFile> files = new List<StorageFile>();
-            List<StorageFolder> folders = new List<StorageFolder>();
+            //List<StorageFile> files = new List<StorageFile>();
+            //List<StorageFolder> folders = new List<StorageFolder>();
 
-
-            await Task.Run(() => { 
+            //keyword asdf: new behavior here, might break
+            return Task.Run(() => { 
                 foreach (IStorageItem item in foldercontents)
                 {
                     if (item.IsOfType(StorageItemTypes.File))
                     {
-                        files.Add((StorageFile)item);
+                        //files.Add((StorageFile)item);
+                        _fileAddTasks.Add(BurnPool.AddFileAsync((StorageFile)item));
                     }
                     if (item.IsOfType(StorageItemTypes.Folder) && recursion)
                     {
@@ -933,6 +1010,9 @@ namespace DiscDoingsWPF
                 }
             });
 
+
+            //keyword asdf: if the above didn't break, this can be removed
+            /*
             if (debugVerbose)
             {
                 DebugEcho(debugName + "IReadOnlyList<StorageFile> files is now populated");
@@ -962,6 +1042,7 @@ namespace DiscDoingsWPF
                     LogOutput(friendlyName + "Completed adding the folder \"" + files[0].Path.Substring(0, files[0].Path.LastIndexOf("\\")) + "\" to the task queue.");
                 }
             });
+            */
 
             if (debugVerbose) DebugEcho(debugName + "Tasks completed");
         }
@@ -970,7 +1051,7 @@ namespace DiscDoingsWPF
         {
             bool logging = true;
             IReadOnlyList<IStorageItem> newfolder = await folder.GetItemsAsync();
-            _fileAddTasks.Add(_AddFolderRecursive(newfolder, true));
+            _fileAddTasks.Add(_addFolderRecursive(newfolder, true));
 
         }
 

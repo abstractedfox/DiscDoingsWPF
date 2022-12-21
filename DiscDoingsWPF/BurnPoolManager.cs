@@ -385,15 +385,18 @@ namespace DiscDoingsWPF
                 }
                 newFile.Checksum = hashtime;
 
-                lock (_lockObjectFiles)
+                if (false) //disable dupe check for debugging purposes
                 {
-                    for (int i = 0; i < AllFiles.Count; i++)
+                    lock (_lockObjectFiles)
                     {
-                        if (AllFiles[i].OriginalPath == newFile.OriginalPath)
+                        for (int i = 0; i < AllFiles.Count; i++)
                         {
-                            //Do something that tells the user this file is a duplicate
-                            _EchoDebug(debugName + "Duplicates found: [" + AllFiles[i].OriginalPath + "] and [" + newFile.OriginalPath + "]");
-                            return;
+                            if (AllFiles[i].OriginalPath == newFile.OriginalPath)
+                            {
+                                //Do something that tells the user this file is a duplicate
+                                _EchoDebug(debugName + "Duplicates found: [" + AllFiles[i].OriginalPath + "] and [" + newFile.OriginalPath + "]");
+                                return;
+                            }
                         }
                     }
                 }
