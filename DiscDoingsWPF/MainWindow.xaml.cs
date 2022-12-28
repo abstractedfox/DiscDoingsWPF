@@ -26,6 +26,7 @@ using System.Threading;
 using System.Collections;
 using Windows.ApplicationModel.UserDataTasks;
 using System.Runtime.CompilerServices;
+using Microsoft.VisualBasic.Logging;
 
 namespace DiscDoingsWPF
 {
@@ -47,26 +48,99 @@ namespace DiscDoingsWPF
 
     }
 
+    //This was done to add built-in task throttling to the object without having to go back and change the rest of the code
     public class TaskContainer<Task> : ICollection
     {
-        List<Task> taskItems = new List<Task>();
+        List<System.Threading.Tasks.Task> taskQueue = new List<System.Threading.Tasks.Task>();
+        private bool _runningPendingTasks = false;
+        
+        private object _lockObject = new Object(), _pendingTaskObject = new Object();
 
-        public Task this[int i]
+        public int MaxTasks { get; set; } = 10;
+
+        public System.Threading.Tasks.Task this[int i]
         {
-            get { return taskItems[i]; }
-            set { taskItems[i] = value; }
+            get {
+                lock (_lockObject)
+                {
+                    return taskQueue[i];
+                }
+            }
+            set
+            {
+                lock (_lockObject)
+                {
+                    taskQueue[i] = value;
+                }
+            }
         }
 
-        public void Add(Task itemToAdd)
+        public void Add(System.Threading.Tasks.Task itemToAdd)
         {
-            taskItems.Add(itemToAdd);
+            lock (_lockObject)
+            {
+                taskQueue.Add(itemToAdd);
+                //System.Windows.MessageBox.Show(itemToAdd.Status.ToString());
+            }
+
+            lock(_pendingTaskObject) if (!_runningPendingTasks) _runPendingTasks();
+        }
+
+        private async void _runPendingTasks()
+        {
+            lock (_pendingTaskObject)
+            {
+                if (!_runningPendingTasks) _runningPendingTasks = true;
+                else return;
+            }
+
+            await System.Threading.Tasks.Task.Run(() =>
+            {
+                while (taskQueue.Count > 0) //Tasks are removed from the list as they finish
+                {
+                    while (TasksRunning() < MaxTasks)
+                    {
+                        lock (_lockObject)
+                        {
+                            var nextTaskQuery = taskQueue.Where(a => !a.IsCompleted && a.Status != TaskStatus.Running);
+                            if (nextTaskQuery.Count() == 0) break;
+                            System.Threading.Tasks.Task? nextTask = null;
+                            try
+                            {
+                                nextTask = nextTaskQuery.First();
+                            }
+                            catch
+                            {
+
+                            }
+
+                            if (nextTask != null)
+                            {
+                                try
+                                {
+                                    nextTask.Start();
+                                }
+                                catch
+                                {
+
+                                }
+                            }
+                            //note: probably will need some exception handling here
+                        }
+                    }
+                }
+                lock (_pendingTaskObject) _runningPendingTasks = false;
+            });
         }
 
         public void RemoveAt(int index)
         {
             try
             {
-                taskItems.RemoveAt(index);
+                lock (_lockObject)
+                {
+                    taskQueue.RemoveAt(index);
+                }
             }
             catch (ArgumentOutOfRangeException)
             {
@@ -74,9 +148,12 @@ namespace DiscDoingsWPF
             }
         }
 
-        public void CopyTo(Task[] array, int arrayIndex)
+        public void CopyTo(System.Threading.Tasks.Task[] array, int arrayIndex)
         {
-            taskItems.CopyTo(array, arrayIndex);
+            lock (_lockObject)
+            {
+                taskQueue.CopyTo(array, arrayIndex);
+            }
         }
 
         void ICollection.CopyTo(Array array, int index)
@@ -89,15 +166,20 @@ namespace DiscDoingsWPF
         {
             get
             {
-                return taskItems.Count;
+                lock (_lockObject)
+                {
+                    return taskQueue.Count;
+                }
             }
         }
 
-        //int ICollection.Count => ((ICollection)taskItems).Count;
 
         public IEnumerator GetEnumerator()
         {
-            return ((IEnumerable)taskItems).GetEnumerator();
+            lock (_lockObject)
+            {
+                return ((IEnumerable)taskQueue).GetEnumerator();
+            }
         }
 
 
@@ -115,6 +197,32 @@ namespace DiscDoingsWPF
             {
                 return false; //Change this to true if we decide to build locks into this class rather than places where it's used
             }
+        }
+
+        
+        public int TasksRunning()
+        {
+            int taskCount = 0;
+            lock (_lockObject)
+            {
+                for (int i = 0; i < taskQueue.Count(); i++)
+                {
+                    if (!taskQueue[i].IsCompleted && taskQueue[i].Status != TaskStatus.Created) taskCount++;
+                    else if (taskQueue[i].IsCompleted)
+                    {
+                        taskQueue.Remove(taskQueue[i]);
+                        i--;
+                    }
+                }
+                /*
+                foreach (System.Threading.Tasks.Task item in runningTasks)
+                {
+                    if (!item.IsCompleted) taskCount++;
+                    else runningTasks.Remove(item);
+                }*/
+            }
+
+            return taskCount;
         }
 
 
@@ -411,6 +519,7 @@ namespace DiscDoingsWPF
         {
             _debugText += text += "\n";
         }
+
 
         //For output that isn't strictly debug related & may be useful to users
         public void LogOutput(string text)
@@ -1011,39 +1120,6 @@ namespace DiscDoingsWPF
             });
 
 
-            //keyword asdf: if the above didn't break, this can be removed
-            /*
-            if (debugVerbose)
-            {
-                DebugEcho(debugName + "IReadOnlyList<StorageFile> files is now populated");
-            }
-            if (logging)
-            {
-                LogOutput(friendlyName + "Adding " + files.Count + " files to the task queue.");
-            }
-
-
-
-            return Task.Run(() => {
-
-                foreach (StorageFile file in files)
-                {
-                    try
-                    {
-                        _fileAddTasks.Add(BurnPool.AddFileAsync(file));
-                    }
-                    catch
-                    {
-                        DebugEcho(debugName + "Exception while adding files to the burnpool.");
-                        System.Windows.MessageBox.Show(debugName + "Exception while adding files to the burnpool.", _applicationName);
-                    }
-                }
-                if (files.Count > 0) {
-                    LogOutput(friendlyName + "Completed adding the folder \"" + files[0].Path.Substring(0, files[0].Path.LastIndexOf("\\")) + "\" to the task queue.");
-                }
-            });
-            */
-
             if (debugVerbose) DebugEcho(debugName + "Tasks completed");
         }
 
@@ -1124,8 +1200,8 @@ namespace DiscDoingsWPF
             if (debug) DebugEcho(debugName + "Start");
             if (msgBoxes) System.Windows.MessageBox.Show(debugName + "Start");
 
-            //while (true)
-            //{
+            while (true)
+            {
                 await Task.Run(() =>
                 {
                     while (GetPendingTasks() > 0) ;
@@ -1133,8 +1209,8 @@ namespace DiscDoingsWPF
                 if (debug) DebugEcho(debugName + "Updating windows now.");
                 if (msgBoxes) System.Windows.MessageBox.Show(debugName + "End");
                 _UpdateAllWindows();
-                //await Task.Delay(1000);
-            //}
+                await Task.Delay(1000);
+            }
         }
 
         //Different from above; watches the list of pending tasks and calls updateAllWindowsWhenTasksComplete() whenever
@@ -1165,8 +1241,9 @@ namespace DiscDoingsWPF
             {
                 try
                 {
-                    if (_fileAddTasks[i] == null) break;
-                    if (!_fileAddTasks[i].IsCompleted) tasks++;
+                    //if (_fileAddTasks[i] == null) break;
+                    //if (!_fileAddTasks[i].IsCompleted) tasks++;
+                    tasks += _fileAddTasks.TasksRunning();
                 }
                 catch (NullReferenceException)
                 {

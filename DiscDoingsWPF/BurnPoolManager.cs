@@ -365,7 +365,8 @@ namespace DiscDoingsWPF
 
             string path = fInfo.FullName;
 
-            return Task.Run(() => {
+            //This used to return Task.Run and has been modified so the task doesn't start immediately
+            return new Task(() => {
                 FileProps newFile = new FileProps();
                 newFile.FileName = GetFilenameFromPath(path);
                 newFile.OriginalPath = path;
