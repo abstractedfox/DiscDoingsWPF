@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -23,10 +22,10 @@ using System.Windows.Forms;
 using System.Text.Json;
 
 using System.Threading;
-using System.Collections;
 using Windows.ApplicationModel.UserDataTasks;
 using System.Runtime.CompilerServices;
 using Microsoft.VisualBasic.Logging;
+using Windows.ApplicationModel.Contacts;
 
 namespace DiscDoingsWPF
 {
@@ -34,7 +33,8 @@ namespace DiscDoingsWPF
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
-    /// 
+    ///
+
 
     //Use this to associate a given error code with an index in the burn pool
     struct ErrorCodeAndIndex
@@ -48,186 +48,6 @@ namespace DiscDoingsWPF
 
     }
 
-    //This was done to add built-in task throttling to the object without having to go back and change the rest of the code
-    public class TaskContainer<Task> : ICollection
-    {
-        List<System.Threading.Tasks.Task> taskQueue = new List<System.Threading.Tasks.Task>();
-        private bool _runningPendingTasks = false;
-        
-        private object _lockObject = new Object(), _pendingTaskObject = new Object();
-
-        public int MaxTasks { get; set; } = 10;
-
-        public System.Threading.Tasks.Task this[int i]
-        {
-            get {
-                lock (_lockObject)
-                {
-                    return taskQueue[i];
-                }
-            }
-            set
-            {
-                lock (_lockObject)
-                {
-                    taskQueue[i] = value;
-                }
-            }
-        }
-
-        public void Add(System.Threading.Tasks.Task itemToAdd)
-        {
-            lock (_lockObject)
-            {
-                taskQueue.Add(itemToAdd);
-                //System.Windows.MessageBox.Show(itemToAdd.Status.ToString());
-            }
-
-            lock(_pendingTaskObject) if (!_runningPendingTasks) _runPendingTasks();
-        }
-
-        private async void _runPendingTasks()
-        {
-            lock (_pendingTaskObject)
-            {
-                if (!_runningPendingTasks) _runningPendingTasks = true;
-                else return;
-            }
-
-            await System.Threading.Tasks.Task.Run(() =>
-            {
-                while (taskQueue.Count > 0) //Tasks are removed from the list as they finish
-                {
-                    while (TasksRunning() < MaxTasks)
-                    {
-                        lock (_lockObject)
-                        {
-                            var nextTaskQuery = taskQueue.Where(a => !a.IsCompleted && a.Status != TaskStatus.Running);
-                            if (nextTaskQuery.Count() == 0) break;
-                            System.Threading.Tasks.Task? nextTask = null;
-                            try
-                            {
-                                nextTask = nextTaskQuery.First();
-                            }
-                            catch
-                            {
-
-                            }
-
-                            if (nextTask != null)
-                            {
-                                try
-                                {
-                                    nextTask.Start();
-                                }
-                                catch
-                                {
-
-                                }
-                            }
-                            //note: probably will need some exception handling here
-                        }
-                    }
-                }
-                lock (_pendingTaskObject) _runningPendingTasks = false;
-            });
-        }
-
-        public void RemoveAt(int index)
-        {
-            try
-            {
-                lock (_lockObject)
-                {
-                    taskQueue.RemoveAt(index);
-                }
-            }
-            catch (ArgumentOutOfRangeException)
-            {
-                throw new ArgumentOutOfRangeException();
-            }
-        }
-
-        public void CopyTo(System.Threading.Tasks.Task[] array, int arrayIndex)
-        {
-            lock (_lockObject)
-            {
-                taskQueue.CopyTo(array, arrayIndex);
-            }
-        }
-
-        void ICollection.CopyTo(Array array, int index)
-        {
-            throw new NotImplementedException();
-            //This is the only way to make the compiler happy
-        }
-
-        public int Count
-        {
-            get
-            {
-                lock (_lockObject)
-                {
-                    return taskQueue.Count;
-                }
-            }
-        }
-
-
-        public IEnumerator GetEnumerator()
-        {
-            lock (_lockObject)
-            {
-                return ((IEnumerable)taskQueue).GetEnumerator();
-            }
-        }
-
-
-        public object SyncRoot
-        {
-            get
-            {
-                return this; //the documentation says to return the current instance
-            }
-        }
-
-        public bool IsSynchronized
-        {
-            get
-            {
-                return false; //Change this to true if we decide to build locks into this class rather than places where it's used
-            }
-        }
-
-        
-        public int TasksRunning()
-        {
-            int taskCount = 0;
-            lock (_lockObject)
-            {
-                for (int i = 0; i < taskQueue.Count(); i++)
-                {
-                    if (!taskQueue[i].IsCompleted && taskQueue[i].Status != TaskStatus.Created) taskCount++;
-                    else if (taskQueue[i].IsCompleted)
-                    {
-                        taskQueue.Remove(taskQueue[i]);
-                        i--;
-                    }
-                }
-                /*
-                foreach (System.Threading.Tasks.Task item in runningTasks)
-                {
-                    if (!item.IsCompleted) taskCount++;
-                    else runningTasks.Remove(item);
-                }*/
-            }
-
-            return taskCount;
-        }
-
-
-    }
-
     public partial class MainWindow : Window
     {
         private string _debugText = "Debug Output\n"; //Append any debug related messages to this string
@@ -236,8 +56,7 @@ namespace DiscDoingsWPF
         private List<Task> _burnQueueTasks, _folderAddTasks, _auditTasks;
         private TaskContainer<Task> _fileAddTasks;
 
-        //don't const this, it will be useful to let the user change it later
-        //private string _tempBurnFolder = "C:\\Users\\#UserName\\AppData\\Local\\Microsoft\\Windows\\Burn\\Burn1\\";
+        private bool _windowUpdateLoopActive = false; //This can be deleted once window updating is cleaned up
 
         public BurnPoolManager BurnPool;
         private BurnPoolManager _lastSavedInstance; //Use to keep track of whether changes have been made
@@ -484,7 +303,7 @@ namespace DiscDoingsWPF
             DebugEcho("Initializing burnpool");
             BurnPool = new BurnPoolManager(this);
             VolumeSizeTextInput.Text = "";
-            _UpdateAllWindows();
+            //_UpdateAllWindows();
             ErrorCode burnDirsSuccess = _GetBurnDirectories();
             if (burnDirsSuccess != ErrorCode.SUCCESS)
             {
@@ -1199,6 +1018,12 @@ namespace DiscDoingsWPF
             const string debugName = "MainWindow::updateAllWindowsWhenTasksComplete():";
             if (debug) DebugEcho(debugName + "Start");
             if (msgBoxes) System.Windows.MessageBox.Show(debugName + "Start");
+
+            if (!_windowUpdateLoopActive)
+            {
+                _windowUpdateLoopActive = true;
+            }
+            else return;
 
             while (true)
             {
