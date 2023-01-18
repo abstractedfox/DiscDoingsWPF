@@ -484,8 +484,8 @@ namespace DiscDoingsWPF
             if (GetPendingTasks() == 0)
             {
                 _burnQueueTasks.Add(_GenerateBurnListsForPoolAsyncA(volumeSize));
-                _UpdateAllWindowsWhenTasksComplete();
-                _CleanUpTaskLists();
+                _updateAllWindowsWhenTasksComplete();
+                _cleanUpTaskLists();
             }
             else
             {
@@ -687,7 +687,7 @@ namespace DiscDoingsWPF
                 InformUser(UserMessages.FILE_AUDIT_FAILED);
             }
 
-            _UpdateAllWindowsWhenTasksComplete();
+            _updateAllWindowsWhenTasksComplete();
         }
 
         private void _MarkUnburnedButtonClick(object sender, RoutedEventArgs e)
@@ -844,8 +844,8 @@ namespace DiscDoingsWPF
                 DebugEcho(debugName + "All files have been added to burnpool");
             }
 
-            _UpdateAllWindowsWhenTasksComplete();
-            _CleanUpTaskLists();
+            _updateAllWindowsWhenTasksComplete();
+            _cleanUpTaskLists();
 
             if (logging)
             {
@@ -869,20 +869,15 @@ namespace DiscDoingsWPF
             const string debugName = "OpenFolderPicker:", friendlyName = "";
             FolderPicker picker = new FolderPicker();
             picker.ViewMode = PickerViewMode.List;
-            //picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop;
             picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
             picker.FileTypeFilter.Add("*");
 
 
-
             if (_GetBurnQueueTasks() > 0)
             {
-                //informUser("Some operations are still in progress. Please wait for operations " +
-                //    "to finish before adding more files.");
                 InformUser(UserMessages.TASKS_PENDING);
                 return;
             }
-
 
 
             var win32moment = new System.Windows.Interop.WindowInteropHelper(this);
@@ -899,11 +894,13 @@ namespace DiscDoingsWPF
             if (debugVerbose) DebugEcho(debugName + "Adding folder " + theFolder.Name);
             if (logging) LogOutput(friendlyName + "Adding folder " + theFolder.Name);
             IReadOnlyList<IStorageItem> foldercontents = await theFolder.GetItemsAsync();
-            _folderAddTasks.Add(_addFolderRecursive(foldercontents, true));
+            //_folderAddTasks.Add(_addFolderRecursive(foldercontents, true));
 
+            //asdf
+            BurnPool.AddFilesConcurrently(foldercontents);
             
-            _UpdateAllWindowsWhenTasksComplete();
-            _CleanUpTaskLists();
+            _updateAllWindowsWhenTasksComplete();
+            _cleanUpTaskLists();
 
             if (debugVerbose)
             {
@@ -933,7 +930,7 @@ namespace DiscDoingsWPF
                     if (item.IsOfType(StorageItemTypes.Folder) && recursion)
                     {
                         if (logging) LogOutput(friendlyName + "Adding the folder \"" + item.Name + "\" to the task queue.");
-                        _StartNewFolderTask((StorageFolder)item);
+                        _startNewFolderTask((StorageFolder)item);
                     }
                 }
             });
@@ -942,7 +939,7 @@ namespace DiscDoingsWPF
             if (debugVerbose) DebugEcho(debugName + "Tasks completed");
         }
 
-        private async void _StartNewFolderTask(StorageFolder folder)
+        private async void _startNewFolderTask(StorageFolder folder)
         {
             bool logging = true;
             IReadOnlyList<IStorageItem> newfolder = await folder.GetItemsAsync();
@@ -962,7 +959,7 @@ namespace DiscDoingsWPF
             {
                 BurnPool.RemoveFile(AllFilesListBox.SelectedItems[i].ToString());
             }
-            _UpdateAllWindowsWhenTasksComplete();
+            _updateAllWindowsWhenTasksComplete();
         }
 
         //Update the main file view
@@ -1012,7 +1009,7 @@ namespace DiscDoingsWPF
             _PopulateBurnedWindow();
         }
 
-        private async void _UpdateAllWindowsWhenTasksComplete()
+        private async void _updateAllWindowsWhenTasksComplete()
         {
             const bool debug = false, msgBoxes = false;
             const string debugName = "MainWindow::updateAllWindowsWhenTasksComplete():";
@@ -1050,7 +1047,7 @@ namespace DiscDoingsWPF
                 if (lastTasks > 0 && GetPendingTasks() == 0)
                 {
                     if (debug) DebugEcho(debugName + "Activated");
-                    _UpdateAllWindowsWhenTasksComplete();
+                    _updateAllWindowsWhenTasksComplete();
                 }
                 lastTasks = GetPendingTasks();
                 await Task.Delay(250);
@@ -1133,7 +1130,7 @@ namespace DiscDoingsWPF
         }
 
         //Removes all completed tasks from fileAddTasks and burnQueueTasks
-        private async void _CleanUpTaskLists()
+        private async void _cleanUpTaskLists()
         {
             const string debugName = "MainWindow::cleanUpTaskLists():";
             const bool debug = false, msgBoxes = false;
@@ -1243,7 +1240,7 @@ namespace DiscDoingsWPF
             {
                 await Task.Run(() =>
                 {
-                    _UpdateAllWindowsWhenTasksComplete();
+                    _updateAllWindowsWhenTasksComplete();
                 });
                 await Task.Delay(500);
             }
