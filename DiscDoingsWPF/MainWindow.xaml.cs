@@ -785,15 +785,12 @@ namespace DiscDoingsWPF
             picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
             picker.FileTypeFilter.Add("*");
             
-            
-            
             if (_GetBurnQueueTasks() > 0)
             {
                 InformUser("Some operations are still in progress. Please wait for operations " +
                     "to finish before adding more files.");
                 return;
             }
-            
 
             var win32moment = new System.Windows.Interop.WindowInteropHelper(this);
             IntPtr handle = win32moment.Handle;
@@ -912,6 +909,7 @@ namespace DiscDoingsWPF
 
         private async void _addFolderRecursiveNew(StorageFolder rootFolder)
         {
+            const bool verbose = true;
             int batchSize = 50;
             int numberBatched = 0;
             List<StorageFile> batchedFiles = new List<StorageFile>();
@@ -932,9 +930,13 @@ namespace DiscDoingsWPF
                     {
                         batchedFiles.Add((StorageFile)file);
                         numberBatched++; //.Count has to count the entire collection each time, not very efficient
+                        if (verbose) DebugEchoAsync("numberBatched: " + numberBatched);
                         if (numberBatched >= batchSize)
                         {
-                            BurnPool.AddFilesConcurrently(batchedFiles); 
+                            if (verbose) DebugEcho("Calling new AddFilesConcurrently batch");
+                            await BurnPool.AddFilesConcurrently(batchedFiles);
+                            if (verbose) DebugEcho("Completed AddFilesConcurrently batch");
+                            numberBatched = 0;
                             //make this async once we've confirmed all of this works
                         }
                     }
@@ -944,6 +946,8 @@ namespace DiscDoingsWPF
                     }
                 }
             }
+
+            if (batchedFiles.Count > 0) await BurnPool.AddFilesConcurrently(batchedFiles);
         }
 
         private async Task<Task> _addFolderRecursive(IReadOnlyList<IStorageItem> folderContents, bool recursion)
@@ -954,7 +958,6 @@ namespace DiscDoingsWPF
             //List<StorageFile> files = new List<StorageFile>();
             //List<StorageFolder> folders = new List<StorageFolder>();
 
-            //keyword asdf: new behavior here, might break
             return Task.Run(() => { 
                 foreach (IStorageItem item in folderContents)
                 {

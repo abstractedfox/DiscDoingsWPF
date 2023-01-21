@@ -415,43 +415,44 @@ namespace DiscDoingsWPF
 
 
         //Adds a batch of files using Parallel.For
-        public ErrorCode AddFilesConcurrently(IReadOnlyList<IStorageItem> files)
+        public async Task<ErrorCode> AddFilesConcurrently(IReadOnlyList<IStorageItem> files)
         {
             if (files == null || files.Count < 1) return ErrorCode.FAILED;
 
-            
-            Parallel.For(0, files.Count, index =>
+
+            await Task.Run(() =>
             {
-                
-                FileInfo fInfo = new FileInfo(files[index].Path);
-                string path = fInfo.FullName;
-
-                FileProps newFile = new FileProps();
-                newFile.FileName = GetFilenameFromPath(path);
-                newFile.OriginalPath = path;
-                newFile.Size = fInfo.Length;
-                newFile.TimeAdded = DateTime.Now.ToString();
-                newFile.LastModified = fInfo.LastWriteTime.ToString();
-                newFile.IsExtra = false;
-                newFile.DiscsBurned = new List<String>();
-                newFile.FileStatus = ErrorCode.FILES_EQUAL;
-                newFile.OverrideErrorCode = false;
-
-                string hashString = "";
-                byte[] hashtime = CreateHash(fInfo);
-                for (int i = 0; i < hashtime.Length; i++)
+                Parallel.For(0, files.Count, index =>
                 {
-                    hashString += hashtime[i].ToString();
-                }
-                newFile.Checksum = hashtime;
+                    FileInfo fInfo = new FileInfo(files[index].Path);
+                    string path = fInfo.FullName;
 
-                lock (_lockObjectFiles)
-                {
-                    AllFiles.Add(newFile);
-                    AllFilesNotInBurnQueue.Add(newFile);
-                }
+                    FileProps newFile = new FileProps();
+                    newFile.FileName = GetFilenameFromPath(path);
+                    newFile.OriginalPath = path;
+                    newFile.Size = fInfo.Length;
+                    newFile.TimeAdded = DateTime.Now.ToString();
+                    newFile.LastModified = fInfo.LastWriteTime.ToString();
+                    newFile.IsExtra = false;
+                    newFile.DiscsBurned = new List<String>();
+                    newFile.FileStatus = ErrorCode.FILES_EQUAL;
+                    newFile.OverrideErrorCode = false;
+
+                    string hashString = "";
+                    byte[] hashtime = CreateHash(fInfo);
+                    for (int i = 0; i < hashtime.Length; i++)
+                    {
+                        hashString += hashtime[i].ToString();
+                    }
+                    newFile.Checksum = hashtime;
+
+                    lock (_lockObjectFiles)
+                    {
+                        AllFiles.Add(newFile);
+                        AllFilesNotInBurnQueue.Add(newFile);
+                    }
+                });
             });
-
             return ErrorCode.SUCCESS;
         }
 
