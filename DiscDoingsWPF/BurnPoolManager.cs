@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Windows.Storage;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Shapes;
 
 namespace DiscDoingsWPF
 {
@@ -225,6 +226,7 @@ namespace DiscDoingsWPF
 
         }
 
+
         public BurnPoolManager()
         {
             AllFiles = new List<FileProps>();
@@ -238,6 +240,7 @@ namespace DiscDoingsWPF
             TasksPendingFlag = false;
             _lockObjectFiles = new object();
         }
+
 
         public BurnPoolManager(MainWindow programMainWindow)
         {
@@ -255,7 +258,6 @@ namespace DiscDoingsWPF
 
 
         //Copy constructor
-        
         public BurnPoolManager(BurnPoolManager copySource)
         {
             const string debugName = "BurnPoolManager(BurnPoolManager copySource) (copy function):";
@@ -365,7 +367,8 @@ namespace DiscDoingsWPF
 
             string path = fInfo.FullName;
 
-            return Task.Run(() => {
+            //This used to return Task.Run and has been modified so the task doesn't start immediately
+            return new Task(() => {
                 FileProps newFile = new FileProps();
                 newFile.FileName = GetFilenameFromPath(path);
                 newFile.OriginalPath = path;
@@ -385,15 +388,18 @@ namespace DiscDoingsWPF
                 }
                 newFile.Checksum = hashtime;
 
-                lock (_lockObjectFiles)
+                if (false) //disable dupe check
                 {
-                    for (int i = 0; i < AllFiles.Count; i++)
+                    lock (_lockObjectFiles)
                     {
-                        if (AllFiles[i].OriginalPath == newFile.OriginalPath)
+                        for (int i = 0; i < AllFiles.Count; i++)
                         {
-                            //Do something that tells the user this file is a duplicate
-                            _EchoDebug(debugName + "Duplicates found: [" + AllFiles[i].OriginalPath + "] and [" + newFile.OriginalPath + "]");
-                            return;
+                            if (AllFiles[i].OriginalPath == newFile.OriginalPath)
+                            {
+                                //Do something that tells the user this file is a duplicate
+                                _EchoDebug(debugName + "Duplicates found: [" + AllFiles[i].OriginalPath + "] and [" + newFile.OriginalPath + "]");
+                                return;
+                            }
                         }
                     }
                 }
@@ -407,6 +413,48 @@ namespace DiscDoingsWPF
 
         }
 
+
+        //Adds a batch of files using Parallel.For
+        public async Task<ErrorCode> AddFilesConcurrently(IReadOnlyList<IStorageItem> files)
+        {
+            if (files == null || files.Count < 1) return ErrorCode.FAILED;
+
+
+            await Task.Run(() =>
+            {
+                Parallel.For(0, files.Count, index =>
+                {
+                    FileInfo fInfo = new FileInfo(files[index].Path);
+                    string path = fInfo.FullName;
+
+                    FileProps newFile = new FileProps();
+                    newFile.FileName = GetFilenameFromPath(path);
+                    newFile.OriginalPath = path;
+                    newFile.Size = fInfo.Length;
+                    newFile.TimeAdded = DateTime.Now.ToString();
+                    newFile.LastModified = fInfo.LastWriteTime.ToString();
+                    newFile.IsExtra = false;
+                    newFile.DiscsBurned = new List<String>();
+                    newFile.FileStatus = ErrorCode.FILES_EQUAL;
+                    newFile.OverrideErrorCode = false;
+
+                    string hashString = "";
+                    byte[] hashtime = CreateHash(fInfo);
+                    for (int i = 0; i < hashtime.Length; i++)
+                    {
+                        hashString += hashtime[i].ToString();
+                    }
+                    newFile.Checksum = hashtime;
+
+                    lock (_lockObjectFiles)
+                    {
+                        AllFiles.Add(newFile);
+                        AllFilesNotInBurnQueue.Add(newFile);
+                    }
+                });
+            });
+            return ErrorCode.SUCCESS;
+        }
 
         //Don't make this async, it will probably cause problems
         //Returns false if there is an issue
@@ -449,6 +497,7 @@ namespace DiscDoingsWPF
             }
             return true;
         }
+
 
         //Use this any time a file is removed from a OneBurn. This is necessary in order to update allFilesNotInBurnQueue
         //This will place the file back in allFilesNotInBurnQueue at the end, so run sortFilesBySize() after calling it
@@ -512,6 +561,7 @@ namespace DiscDoingsWPF
             return false;
         }
 
+
         //Deletes a OneBurn from the list, restoring all files which are not in other OneBurns to the allFilesNotInBurnQueue
         //Make sure to check that said files aren't in other OneBurns, since that's possible to do.
         //This function will -not- check the timesBurned field to see if the OneBurn has been burned to a disc.
@@ -554,6 +604,7 @@ namespace DiscDoingsWPF
 
             return true;
         }
+
 
         public byte[] CreateHash(FileInfo fInfo)
         {
