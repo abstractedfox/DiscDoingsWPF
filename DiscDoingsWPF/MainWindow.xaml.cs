@@ -893,11 +893,11 @@ namespace DiscDoingsWPF
 
             if (debugVerbose) DebugEcho(debugName + "Adding folder " + theFolder.Name);
             if (logging) LogOutput(friendlyName + "Adding folder " + theFolder.Name);
-            IReadOnlyList<IStorageItem> foldercontents = await theFolder.GetItemsAsync();
-            //_folderAddTasks.Add(_addFolderRecursive(foldercontents, true));
+            IReadOnlyList<IStorageItem> folderContents = await theFolder.GetItemsAsync();
+            //_folderAddTasks.Add(_addFolderRecursive(folderContents, true));
 
             //asdf
-            BurnPool.AddFilesConcurrently(foldercontents);
+            _addFolderRecursiveNew(theFolder);
             
             _updateAllWindowsWhenTasksComplete();
             _cleanUpTaskLists();
@@ -910,17 +910,53 @@ namespace DiscDoingsWPF
 
         }
 
-        private async Task<Task> _addFolderRecursive(IReadOnlyList<IStorageItem> foldercontents, bool recursion)
+        private async void _addFolderRecursiveNew(StorageFolder rootFolder)
+        {
+            int batchSize = 50;
+            int numberBatched = 0;
+            List<StorageFile> batchedFiles = new List<StorageFile>();
+            List<StorageFolder> nextFolders = new List<StorageFolder>();
+
+            nextFolders.Add(rootFolder);
+
+            //asdf
+            //BurnPool.AddFilesConcurrently(foldercontents);
+            while (nextFolders.Count > 0)
+            {
+                IReadOnlyList<IStorageItem> folderContents = await nextFolders[0].GetItemsAsync();
+                nextFolders.RemoveAt(nextFolders.Count - 1); //Remove from back for fewer memcopies
+
+                foreach (var file in folderContents)
+                {
+                    if (file.IsOfType(StorageItemTypes.File))
+                    {
+                        batchedFiles.Add((StorageFile)file);
+                        numberBatched++; //.Count has to count the entire collection each time, not very efficient
+                        if (numberBatched >= batchSize)
+                        {
+                            BurnPool.AddFilesConcurrently(batchedFiles); 
+                            //make this async once we've confirmed all of this works
+                        }
+                    }
+                    if (file.IsOfType(StorageItemTypes.Folder))
+                    {
+                        nextFolders.Add((StorageFolder)file);
+                    }
+                }
+            }
+        }
+
+        private async Task<Task> _addFolderRecursive(IReadOnlyList<IStorageItem> folderContents, bool recursion)
         {
             const string debugName = "MainWindow::addFolderRecursive():", friendlyName = "";
             const bool debugVerbose = false, logging = true;
-            
+
             //List<StorageFile> files = new List<StorageFile>();
             //List<StorageFolder> folders = new List<StorageFolder>();
 
             //keyword asdf: new behavior here, might break
             return Task.Run(() => { 
-                foreach (IStorageItem item in foldercontents)
+                foreach (IStorageItem item in folderContents)
                 {
                     if (item.IsOfType(StorageItemTypes.File))
                     {

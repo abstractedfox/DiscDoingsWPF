@@ -419,8 +419,10 @@ namespace DiscDoingsWPF
         {
             if (files == null || files.Count < 1) return ErrorCode.FAILED;
 
+            
             Parallel.For(0, files.Count, index =>
             {
+                
                 FileInfo fInfo = new FileInfo(files[index].Path);
                 string path = fInfo.FullName;
 
