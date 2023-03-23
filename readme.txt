@@ -1,4 +1,4 @@
-As of late January 2023, work on this project is on pause while a slightly smarter, cleaner rehash is being worked on, which should have the bonus of being a little nicer to maintain. That said, feel free to test this one out in the interim. The original readme, otherwise unchanged, continues from here:
+As of late March 2023, this project has been functionally replaced with a full rewrite; see the repo titled "BurnManager". This project was a fun way to get started with C# and learn about WPF and asynchronous design, but better design decisions helped the new version to be more performant and more maintainable.  The original readme, otherwise unchanged, continues from here:
 
 Welcome to 'Burn Manager 0.1!'
 This is a Windows GUI utility for people who want to use blu rays or similar media to store their offline backups. It can efficiently arrange a pool of files to fit across the smallest number of discs possible, keep track of checksums for data integrity verification, and stage the files for you in the Windows temporary burn folder where you can burn them to disc.
